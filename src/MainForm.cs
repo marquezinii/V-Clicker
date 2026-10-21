@@ -516,14 +516,14 @@ namespace VClicker
 
         private Control BuildLockCard()
         {
-            Grid body = Table(LabelColumn, "100%");
+            // Two rows (switch + Choose, app + focus-loss mode) keep the window laptop-sized.
+            Grid body = Table("100%", "auto");
             FullRow(body, Title("card.lock"));
 
             chkLock = Check("lock.enable");
             chkLock.AccessibleName = "Window Lock";
             lockable.Add(chkLock);
             Localize(() => tips.SetToolTip(chkLock, Loc.T("lock.tip")));
-            FullRow(body, chkLock);
 
             lockAppLabel = new Label
             {
@@ -543,15 +543,18 @@ namespace VClicker
             });
             lockChoose.Click += OnChooseLockApp;
             lockable.Add(lockChoose);
-            Grid app = Table("100%", "auto");
-            Row(app, lockAppLabel, lockChoose);
-            FullRow(body, app);
+            chkLock.Anchor = AnchorStyles.Left;
+            lockChoose.Anchor = AnchorStyles.Right;
+            Row(body, chkLock, lockChoose);
 
             segLockMode = Seg("lock.pause", "lock.stop");
             segLockMode.AccessibleName = "When the app loses focus";
+            segLockMode.Dock = DockStyle.None;
+            segLockMode.Size = Theme.Sz(210, 30);
             lockable.Add(segLockMode);
             segLockMode.SelectedChanged += OnConfigChanged;
-            Row(body, RowLabel("lock.onFocusLoss"), segLockMode);
+            Localize(() => tips.SetToolTip(segLockMode, Loc.T("lock.onFocusLoss")));
+            Row(body, lockAppLabel, segLockMode);
 
             return NewCard(body);
         }

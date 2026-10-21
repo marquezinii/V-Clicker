@@ -101,11 +101,11 @@ namespace VClicker
 
             // window lock
             ["card.lock"] = new[] { "WINDOW LOCK", "WINDOW LOCK" },
-            ["lock.enable"] = new[] { "Clicar só em um aplicativo", "Only click inside one app" },
+            ["lock.enable"] = new[] { "Só em um aplicativo", "Only in one app" },
             ["lock.tip"] = new[] { "Os cliques só acontecem com o aplicativo escolhido em primeiro plano; num Alt+Tab, o V-Clicker pausa.", "Clicks only happen while the chosen app is in front; on Alt+Tab, V-Clicker pauses." },
             ["lock.none"] = new[] { "Nenhum escolhido", "None chosen" },
             ["lock.choose"] = new[] { "Escolher…", "Choose…" },
-            ["lock.onFocusLoss"] = new[] { "Ao perder o foco", "On focus loss" },
+            ["lock.onFocusLoss"] = new[] { "Quando o aplicativo perde o foco (Alt+Tab): pausar e retomar ao voltar, ou parar de vez.", "When the app loses focus (Alt+Tab): pause and resume when it is back, or stop for good." },
             ["lock.pause"] = new[] { "Pausar e retomar", "Pause & resume" },
             ["lock.stop"] = new[] { "Parar", "Stop" },
             ["picker.title"] = new[] { "Escolher aplicativo", "Choose an app" },
