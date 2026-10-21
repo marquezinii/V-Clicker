@@ -1008,6 +1008,7 @@ namespace VClicker.Tests
                         IntPtr handle = form.Handle;
                         True(handle != IntPtr.Zero, "handle");
                         Rectangle area = Screen.PrimaryScreen.WorkingArea;
+                        form.FitToScreen(area); // what OnShown does; the content may be taller than a 720 px CI screen
                         True(form.Height <= area.Height && form.Width <= area.Width,
                             "window " + form.Size + " does not fit in " + area.Size);
                     }
