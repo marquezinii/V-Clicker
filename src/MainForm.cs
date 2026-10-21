@@ -332,7 +332,7 @@ namespace VClicker
             column.BackColor = Theme.Bg;
             Row(column, BuildIntervalCard());
             Row(column, BuildClickCard());
-            Row(column, BuildPositionCard());
+            Row(column, BuildLockCard());
             AddFiller(column);
             return column;
         }
@@ -587,9 +587,8 @@ namespace VClicker
             Grid column = Table("100%");
             column.BackColor = Theme.Bg;
             Row(column, BuildStatusCard());
-            Row(column, BuildLockCard());
-            Row(column, BuildHotkeysCard());
-            Row(column, BuildOptionsCard());
+            Row(column, BuildPositionCard());
+            Row(column, BuildSettingsCard());
             Row(column, BuildFooter());
             AddFiller(column);
             return column;
@@ -612,6 +611,7 @@ namespace VClicker
             Label sentNote = Lbl("stat.note", 8f, dim: true);
             sentNote.Margin = Theme.Pad(0, 0, 0, 10);
             sentNote.MaximumSize = new Size(Theme.Dp(300), 0);
+            Localize(() => tips.SetToolTip(sentNote, Loc.T("stat.note.tip")));
             FullRow(body, sentNote);
 
             startButton = new FlatButton
@@ -648,9 +648,13 @@ namespace VClicker
             return tile;
         }
 
-        private Control BuildHotkeysCard()
+        /// <summary>
+        /// Hotkeys and options in one card (one header and padding fewer keeps the window laptop-sized).
+        /// One grid, no nesting: 33 / 17 / 17 / 33 % columns give three equal hotkey cells and two equal option cells.
+        /// </summary>
+        private Control BuildSettingsCard()
         {
-            Grid body = Table(LabelColumn, "100%");
+            Grid body = Table("33%", "17%", "17%", "33%");
             FullRow(body, Title("card.hotkeys"));
 
             hkToggle = Hk(IdToggle);
@@ -662,16 +666,11 @@ namespace VClicker
             hkToggle.ValueChanged += OnHotkeyChanged;
             hkStop.ValueChanged += OnHotkeyChanged;
             hkCapture.ValueChanged += OnHotkeyChanged;
-            Row(body, RowLabel("hk.toggle"), hkToggle);
-            Row(body, RowLabel("hk.stop"), hkStop);
-            Row(body, RowLabel("hk.capture"), hkCapture);
+            hkToggle.Margin = hkStop.Margin = Theme.Pad(0, 0, 6, 12);
+            hkCapture.Margin = Theme.Pad(0, 0, 0, 12);
+            Thirds(body, HotkeyCaption("hk.toggle"), HotkeyCaption("hk.stop"), HotkeyCaption("hk.capture"));
+            Thirds(body, hkToggle, hkStop, hkCapture);
 
-            return NewCard(body);
-        }
-
-        private Control BuildOptionsCard()
-        {
-            Grid body = Table("50%", "50%");
             chkTop = Check("opt.top");
             chkSounds = Check("opt.sounds");
             chkTray = Check("opt.tray");
@@ -679,14 +678,35 @@ namespace VClicker
             Localize(() => tips.SetToolTip(chkHud, Loc.T("opt.hud.tip")));
             segHudCorner = new Segmented
             {
-                Items = new[] { "\u2196", "\u2197", "\u2199", "\u2198" }, Size = Theme.Sz(150, 28), Anchor = AnchorStyles.Left,
+                Items = new[] { "↖", "↗", "↙", "↘" }, Size = Theme.Sz(150, 28), Anchor = AnchorStyles.Left,
                 Margin = Theme.Pad(0, 0, 0, 6), AccessibleName = "Indicator corner"
             };
             segHudCorner.SelectedChanged += OnConfigChanged;
-            Row(body, chkTop, chkSounds);
+            Halves(body, chkTop, chkSounds);
             FullRow(body, chkTray);
-            Row(body, chkHud, segHudCorner);
+            Halves(body, chkHud, segHudCorner);
             return NewCard(body);
+        }
+
+        private static void Thirds(TableLayoutPanel table, Control a, Control b, Control c)
+        {
+            Row(table, a, b, null, c);
+            table.SetColumnSpan(b, 2);
+        }
+
+        private static void Halves(TableLayoutPanel table, Control a, Control b)
+        {
+            Row(table, a, null, b);
+            table.SetColumnSpan(a, 2);
+            table.SetColumnSpan(b, 2);
+        }
+
+        private Label HotkeyCaption(string key)
+        {
+            Label label = Lbl(key, 8.5f, dim: true);
+            label.Margin = Theme.Pad(0, 0, 4, 4);
+            label.AutoEllipsis = true;
+            return label;
         }
 
         private DarkCheck Check(string key)

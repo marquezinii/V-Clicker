@@ -46,7 +46,8 @@ namespace VClicker
             ["stat.requested"] = new[] { "SOLICITADO", "REQUESTED" },
             ["stat.sent"] = new[] { "ENVIADO", "SENT" },
             ["stat.time"] = new[] { "TEMPO", "TIME" },
-            ["stat.note"] = new[] { "Cliques e CPS enviados ao Windows (duplo conta 1); o jogo pode reconhecer menos.", "Clicks and CPS sent to Windows (a double click counts as 1); the game may register fewer." },
+            ["stat.note"] = new[] { "Enviados ao Windows; o jogo pode reconhecer menos.", "Sent to Windows; the game may register fewer." },
+            ["stat.note.tip"] = new[] { "Cliques e CPS contam o que o Windows aceitou (um clique duplo conta 1). O V-Clicker não sabe quantos o jogo reconheceu.", "Clicks and CPS count what Windows accepted (a double click counts as 1). V-Clicker cannot know how many the game registered." },
 
             // interval
             ["card.interval"] = new[] { "VELOCIDADE DOS CLIQUES", "CLICK SPEED" },
