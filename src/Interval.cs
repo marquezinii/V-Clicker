@@ -9,12 +9,13 @@ namespace VClicker
     internal static class Interval
     {
         public const double MinMs = 1;
+        public const double DefaultMs = 100;
         public const double MaxMs = 24 * 60 * 60 * 1000 - 1;
         public const double MinCps = 0.1;
         public const double MaxCps = 1000;
 
         public static double Clamp(double totalMs) =>
-            double.IsNaN(totalMs) ? MinMs : Math.Max(MinMs, Math.Min(MaxMs, totalMs));
+            double.IsNaN(totalMs) ? DefaultMs : Math.Max(MinMs, Math.Min(MaxMs, totalMs)); // never the fastest by accident
 
         public static double Join(int hours, int minutes, int seconds, double milliseconds) =>
             Clamp(((hours * 60.0 + minutes) * 60 + seconds) * 1000 + milliseconds);

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -80,7 +81,8 @@ namespace VClicker
 
         public bool Click(ClickButton button, bool doubleClick, Point? at)
         {
-            if (at.HasValue) Native.SetCursorPos(at.Value.X, at.Value.Y);
+            // If the cursor cannot be moved (secure desktop, say), clicking would hit whatever is under it.
+            if (at.HasValue && !Native.SetCursorPos(at.Value.X, at.Value.Y)) return false;
 
             Native.INPUT[] inputs = Build(button, doubleClick);
             if (Native.SendInput((uint)inputs.Length, inputs, InputSize) == inputs.Length) return true;
@@ -124,6 +126,41 @@ namespace VClicker
     }
 
     /// <summary>
+    /// Clicks per second that Windows actually accepted, measured from the engine's own click times: the clicks
+    /// between two samples divided by the time between their latest clicks. Exact for a steady rate at any speed
+    /// (0.1 to 1000 CPS), unlike counting clicks per UI tick, which reads 0 or a spike at slow rates.
+    /// </summary>
+    internal sealed class RateMeter
+    {
+        // (click count, timestamp of the latest click), oldest first.
+        private readonly Queue<KeyValuePair<long, long>> samples = new Queue<KeyValuePair<long, long>>();
+        private long lastClicks = -1;
+
+        public void Reset()
+        {
+            samples.Clear();
+            lastClicks = -1;
+        }
+
+        /// <param name="windowSeconds">How far back to average.</param>
+        /// <returns>NaN until two clicks have been seen since the last <see cref="Reset"/>.</returns>
+        public double Sample(long clicks, long lastClickStamp, double windowSeconds)
+        {
+            if (clicks <= 0 || lastClickStamp == 0) return double.NaN;
+            if (clicks != lastClicks)
+            {
+                samples.Enqueue(new KeyValuePair<long, long>(clicks, lastClickStamp));
+                lastClicks = clicks;
+            }
+            long window = (long)(windowSeconds * Stopwatch.Frequency);
+            while (samples.Count > 2 && lastClickStamp - samples.Peek().Value > window) samples.Dequeue();
+            KeyValuePair<long, long> first = samples.Peek();
+            if (first.Key >= clicks || lastClickStamp <= first.Value) return double.NaN;
+            return (clicks - first.Key) * (double)Stopwatch.Frequency / (lastClickStamp - first.Value);
+        }
+    }
+
+    /// <summary>
     /// Runs the click loop on a dedicated high-priority thread. Timing uses an absolute schedule
     /// (no drift), a coarse wait plus a short spin for sub-millisecond accuracy, and never
     /// "catches up" with a burst of clicks after a stall or a Window Lock pause.
@@ -132,6 +169,13 @@ namespace VClicker
     {
         /// <summary>How often a paused run looks at the locked window again.</summary>
         private const int PausePollMs = 25;
+        /// <summary>
+        /// The locked window must stay in front this long before clicking resumes, so a click never lands while
+        /// the user is still switching back (Alt still held from Alt+Tab, a window still animating in).
+        /// </summary>
+        internal const int ResumeSettleMs = 200;
+        /// <summary>Strict mode ignores a focus blip shorter than this (Windows briefly has no foreground window while switching).</summary>
+        internal const int StrictGraceMs = 100;
 
         private readonly IClickSink sink;
         private readonly Func<int, bool> isKeyDown;
@@ -146,6 +190,7 @@ namespace VClicker
         private long sessionSince;
         private long clickingSince;
         private long countdownEnd;
+        private long lastClickStamp;
         private long pausedTicks;
         private long pauseSince;
         private long finalElapsedTicks;
@@ -171,6 +216,9 @@ namespace VClicker
         public LockStatus PauseCause => (LockStatus)Volatile.Read(ref pauseCause);
 
         public long Clicks => Interlocked.Read(ref clicks);
+
+        /// <summary>Stopwatch timestamp of the latest click Windows accepted (0 = none yet in this run).</summary>
+        public long LastClickStamp => Interlocked.Read(ref lastClickStamp);
 
         /// <summary>Time spent clicking in the current (or last) run: no start countdown, no pauses.</summary>
         public TimeSpan Elapsed
@@ -219,12 +267,15 @@ namespace VClicker
                     if (Phase != EnginePhase.Idle || !worker.Join(250)) return false;
                 }
                 Interlocked.Exchange(ref clicks, 0);
+                Interlocked.Exchange(ref lastClickStamp, 0);
                 Interlocked.Exchange(ref clickingSince, 0);
                 Interlocked.Exchange(ref pausedTicks, 0);
                 Interlocked.Exchange(ref pauseSince, 0);
                 Interlocked.Exchange(ref finalElapsedTicks, 0);
                 Interlocked.Exchange(ref finalSessionTicks, 0);
-                Interlocked.Exchange(ref sessionSince, Stopwatch.GetTimestamp());
+                long now = Stopwatch.GetTimestamp();
+                Interlocked.Exchange(ref sessionSince, now);
+                Interlocked.Exchange(ref countdownEnd, now + MsToTicks(plan.StartDelayMs)); // valid before the thread runs
                 Volatile.Write(ref stopRequest, (int)StopReason.Manual);
                 cancel?.Dispose();
                 cancel = new CancellationTokenSource();
@@ -289,10 +340,12 @@ namespace VClicker
                     // Window Lock is asked right before every click; a pause blocks inside AwaitLock.
                     StopReason? locked = AwaitLock(plan, token, out bool resumed);
                     if (locked.HasValue) { reason = locked.Value; break; }
-                    if (resumed) next = Stopwatch.GetTimestamp(); // clicks missed while paused are dropped, not replayed
-                    else if (Stopwatch.GetTimestamp() < next)
+                    long current = Stopwatch.GetTimestamp();
+                    if (resumed && next < current) next = current; // clicks missed while paused are dropped, not replayed
+                    if (current < next)
                     {
-                        // The wait ended early on a lock miss that cleared by itself: finish the wait, never click early.
+                        // Woken early (a lock miss mid-wait, or a pause shorter than the interval): finish the
+                        // wait, so a click never comes sooner than the interval after the previous one.
                         StopReason? early = WaitUntil(next, plan, token);
                         if (early.HasValue) { reason = early.Value; break; }
                         continue;
@@ -304,6 +357,7 @@ namespace VClicker
                         break;
                     }
 
+                    Interlocked.Exchange(ref lastClickStamp, Stopwatch.GetTimestamp());
                     long count = Interlocked.Increment(ref clicks);
                     if (plan.MaxClicks > 0 && count >= plan.MaxClicks) { reason = StopReason.Completed; break; }
 
@@ -314,6 +368,11 @@ namespace VClicker
                     StopReason? interrupted = WaitUntil(next, plan, token);
                     if (interrupted.HasValue) { reason = interrupted.Value; break; }
                 }
+            }
+            catch (Exception)
+            {
+                // Never let a fault kill the app from this thread: stop clicking and report it like a refused click.
+                reason = StopReason.Blocked;
             }
             finally
             {
@@ -333,7 +392,6 @@ namespace VClicker
         {
             long remaining = MsToTicks(plan.StartDelayMs);
             long last = Stopwatch.GetTimestamp();
-            Interlocked.Exchange(ref countdownEnd, last + remaining);
             while (true)
             {
                 StopReason? locked = AwaitLock(plan, token, out bool resumed);
@@ -358,12 +416,14 @@ namespace VClicker
             if (plan.Lock == null) return null;
             LockStatus status = plan.Lock(plan.FixedPosition);
             if (status == LockStatus.Ok) return null;
-            StopReason? end = Verdict(status, plan);
+            StopReason? end = Verdict(status, plan, 0);
             if (end.HasValue) return end;
 
             EnginePhase before = Phase;
             long pauseStart = Stopwatch.GetTimestamp();
             long limit = MsToTicks(plan.PauseLimitMs);
+            long settle = MsToTicks(ResumeSettleMs);
+            long backSince = 0;
             if (before == EnginePhase.Clicking) Interlocked.Exchange(ref pauseSince, pauseStart);
             Volatile.Write(ref pauseCause, (int)status);
             Volatile.Write(ref phase, (int)EnginePhase.Paused);
@@ -374,14 +434,18 @@ namespace VClicker
                     if (token.WaitHandle.WaitOne(PausePollMs)) return Requested;
                     if (plan.HoldKey != 0 && !isKeyDown(plan.HoldKey)) return StopReason.KeyReleased;
                     // Measured from when the pause began; repeated focus changes do not restart it.
-                    if (Stopwatch.GetTimestamp() - pauseStart >= limit) return StopReason.PauseTimeout;
+                    long now = Stopwatch.GetTimestamp();
+                    if (now - pauseStart >= limit) return StopReason.PauseTimeout;
                     status = plan.Lock(plan.FixedPosition);
                     if (status == LockStatus.Ok)
                     {
+                        if (backSince == 0) backSince = now;
+                        if (now - backSince < settle) continue;
                         resumed = true;
                         return null;
                     }
-                    end = Verdict(status, plan);
+                    backSince = 0;
+                    end = Verdict(status, plan, now - pauseStart);
                     if (end.HasValue) return end;
                     Volatile.Write(ref pauseCause, (int)status);
                 }
@@ -398,17 +462,18 @@ namespace VClicker
         }
 
         /// <summary>The Window Lock answers that end the run instead of pausing it.</summary>
-        private static StopReason? Verdict(LockStatus status, ClickPlan plan)
+        private static StopReason? Verdict(LockStatus status, ClickPlan plan, long pausedTicks)
         {
             if (status == LockStatus.Closed) return StopReason.TargetClosed;
-            if (status == LockStatus.NotFocused && plan.StopOnFocusLoss) return StopReason.FocusLost;
+            if (status == LockStatus.NotFocused && plan.StopOnFocusLoss && pausedTicks >= MsToTicks(StrictGraceMs))
+                return StopReason.FocusLost;
             return null;
         }
 
         /// <summary>Interval to the next click in Stopwatch ticks, with optional random jitter.</summary>
         internal static long NextIntervalTicks(ClickPlan plan, Random random)
         {
-            double ticks = MsToTicks(plan.IntervalMs);
+            double ticks = MsToTicks(Interval.Clamp(plan.IntervalMs)); // never a zero, negative or NaN interval
             if (plan.JitterPercent > 0)
             {
                 double spread = plan.JitterPercent / 100.0;
@@ -430,9 +495,10 @@ namespace VClicker
                 {
                     // Lost the locked window mid-wait: hand back to the loop so it pauses now, not at the next click.
                     if (plan.Lock != null && plan.Lock(plan.FixedPosition) != LockStatus.Ok) return null;
-                    // Sleep in slices so a cancel or a released key is noticed quickly,
-                    // and wake ~2 ms early to finish with the spin below.
-                    token.WaitHandle.WaitOne((int)Math.Max(1, Math.Min(remainingMs - 2, 20)));
+                    // Wake ~2 ms early to finish with the spin below. A cancel wakes the wait at once; only the
+                    // lock and the hold key need polling, so plain runs sleep in one go (cheap at slow rates).
+                    bool polling = plan.Lock != null || plan.HoldKey != 0;
+                    token.WaitHandle.WaitOne((int)Math.Max(1, polling ? Math.Min(remainingMs - 2, 20) : remainingMs - 2));
                 }
                 else
                     Thread.SpinWait(40);

@@ -74,7 +74,8 @@ namespace VClicker
             KeyDown += (sender, e) =>
             {
                 if (e.KeyCode == Keys.Escape) DialogResult = DialogResult.Cancel;
-                else if (e.KeyCode == Keys.Enter && list.SelectedItem != null) Accept();
+                // Only from the list: Enter on the Cancel button must cancel.
+                else if (e.KeyCode == Keys.Enter && ActiveControl == list && list.SelectedItem != null) Accept();
             };
         }
 
@@ -84,7 +85,14 @@ namespace VClicker
         public static AppWindow Pick(IWin32Window owner, string prompt, List<AppWindow> windows)
         {
             using (var picker = new WindowPicker(prompt, windows))
-                return picker.ShowDialog(owner) == DialogResult.OK ? picker.Selected : null;
+            {
+                // Started from the tray, the main window is hidden: center on the screen and stay in front instead.
+                if (owner is Form form && form.Visible && form.WindowState != FormWindowState.Minimized)
+                    return picker.ShowDialog(owner) == DialogResult.OK ? picker.Selected : null;
+                picker.StartPosition = FormStartPosition.CenterScreen;
+                picker.TopMost = true;
+                return picker.ShowDialog() == DialogResult.OK ? picker.Selected : null;
+            }
         }
 
         private void Accept()
@@ -118,7 +126,8 @@ namespace VClicker
             const TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix |
                                           TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter;
             TextRenderer.DrawText(e.Graphics, window.DisplayName + "  (" + window.ExeName + ")", Theme.Ui(9.5f, true), nameArea, Theme.Text, flags);
-            TextRenderer.DrawText(e.Graphics, window.Title, Theme.Ui(8.5f), titleArea, Theme.Dim, flags);
+            // Several windows of one game look alike; the process id tells them apart.
+            TextRenderer.DrawText(e.Graphics, window.Title + "  \u00b7  PID " + window.ProcessId, Theme.Ui(8.5f), titleArea, Theme.Dim, flags);
         }
 
         private Icon IconFor(string path)

@@ -103,7 +103,7 @@ namespace VClicker.Tests
                 Equal(Interval.MaxMs, Interval.Join(99999, 0, 0, 0), "join does not overflow");
                 Equal(10.0, Interval.ClicksPerSecond(100), "100 ms = 10 cps");
                 Equal(1000.0, Interval.ClicksPerSecond(1), "1 ms = 1000 cps");
-                Equal(Interval.MinMs, Interval.Clamp(double.NaN), "NaN -> 1 ms");
+                Equal(Interval.DefaultMs, Interval.Clamp(double.NaN), "NaN -> the default, never the fastest");
             });
 
             Test("interval: fractional milliseconds split and join without loss", () =>
@@ -598,14 +598,88 @@ namespace VClicker.Tests
                     Thread.Sleep(300);
                     Equal(paused, sink.Count, "no click lands while another window is in front");
                     status = LockStatus.Ok;
-                    Thread.Sleep(100);
+                    Thread.Sleep(ClickEngine.ResumeSettleMs - 60);
+                    Equal(paused, sink.Count, "no click until the window has been back for a moment (Alt may still be held)");
+                    Thread.Sleep(160);
                     Equal(EnginePhase.Clicking, engine.Phase, "resumed by itself");
                     int resumed = sink.Count - paused;
-                    // 100 ms at 10 ms = ~10 clicks; replaying the 300 ms pause would add ~30 more.
-                    True(resumed >= 5 && resumed <= 14, resumed + " clicks in 100 ms after resuming (missed clicks must be dropped)");
+                    // ~100 ms of clicking at 10 ms = ~10 clicks; replaying the 300 ms pause would add ~30 more.
+                    True(resumed >= 3 && resumed <= 16, resumed + " clicks after resuming (missed clicks must be dropped)");
                     engine.Stop();
                     True(engine.WaitForStop(1000), "stop");
                 }
+            });
+
+            Test("engine: a short focus blip never makes a click come early or ends a strict run", () =>
+            {
+                var sink = new FakeSink();
+                var status = LockStatus.Ok;
+                using (var engine = new ClickEngine(sink))
+                {
+                    StopReason? reason = null;
+                    engine.Stopped += r => reason = r;
+                    // One click, then a 400 ms gap. A 50 ms blip in the gap must not pull the next click forward,
+                    // and in strict mode it is too short to count as losing the focus.
+                    engine.Start(new ClickPlan { IntervalMs = 400, StopOnFocusLoss = true, Lock = at => status });
+                    Thread.Sleep(60);
+                    Equal(1, sink.Count, "first click");
+                    status = LockStatus.NotFocused;
+                    Thread.Sleep(50);
+                    status = LockStatus.Ok;
+                    Thread.Sleep(ClickEngine.ResumeSettleMs + 60);
+                    Equal(1, sink.Count, "the second click still waits for its 400 ms slot");
+                    True(engine.Phase != EnginePhase.Idle, "a blip shorter than the grace does not stop a strict run (" + reason + ")");
+                    Thread.Sleep(250);
+                    Equal(2, sink.Count, "second click on schedule");
+                    engine.Stop();
+                    True(engine.WaitForStop(1000), "stop");
+                }
+            });
+
+            Test("engine: a fault in the lock check stops the run instead of crashing the app", () =>
+            {
+                using (var engine = new ClickEngine(new FakeSink()))
+                    Equal(StopReason.Blocked, RunToEnd(engine, new ClickPlan
+                    {
+                        IntervalMs = 5, Lock = at => { throw new InvalidOperationException("boom"); }
+                    }).Value, "reason");
+            });
+
+            Test("engine: an invalid interval is never treated as 'as fast as possible'", () =>
+            {
+                double freq = System.Diagnostics.Stopwatch.Frequency / 1000.0;
+                var random = new Random(1);
+                Equal(1.0, Math.Round(ClickEngine.NextIntervalTicks(new ClickPlan { IntervalMs = 0 }, random) / freq, 3), "0 -> 1 ms");
+                Equal(1.0, Math.Round(ClickEngine.NextIntervalTicks(new ClickPlan { IntervalMs = -50 }, random) / freq, 3), "negative -> 1 ms");
+                Equal(Interval.DefaultMs, Math.Round(ClickEngine.NextIntervalTicks(new ClickPlan { IntervalMs = double.NaN }, random) / freq, 3), "NaN -> default");
+            });
+
+            Test("sent rate: exact for steady clicks from 0.1 to 1000 CPS, unknown until two clicks", () =>
+            {
+                long f = System.Diagnostics.Stopwatch.Frequency;
+                foreach (double rate in new[] { 0.1, 1, 15, 1000 })
+                {
+                    var meter = new RateMeter();
+                    double interval = f / rate;
+                    double window = Math.Max(2, 3 / rate);
+                    True(double.IsNaN(meter.Sample(0, 0, window)), "no clicks yet");
+                    True(double.IsNaN(meter.Sample(1, 1000, window)), "one click is not a rate");
+                    double last = double.NaN;
+                    // UI ticks every 100 ms; the engine reports its click count and the time of its latest click.
+                    for (int tick = 1; tick <= 400; tick++)
+                    {
+                        double now = tick * 0.1 * f;
+                        long clicks = 1 + (long)Math.Floor(now / interval);
+                        long stamp = 1000 + (long)((clicks - 1) * interval);
+                        last = meter.Sample(clicks, stamp, window);
+                    }
+                    True(Math.Abs(last - rate) / rate < 0.01, rate + " CPS measured as " + last);
+                }
+                var reset = new RateMeter();
+                reset.Sample(5, 5 * f, 2);
+                reset.Sample(10, 6 * f, 2);
+                reset.Reset();
+                True(double.IsNaN(reset.Sample(11, 7 * f, 2)), "after a pause, measure the resumed clicks only");
             });
 
             Test("engine: Window Lock stop rules (closed window, strict mode, spot outside, pause limit)", () =>
@@ -753,6 +827,42 @@ namespace VClicker.Tests
                 True(WindowLock.FromHandle(IntPtr.Zero) == null, "no window");
             });
 
+            Test("window lock: a dialog in front resolves to the window that owns it", () =>
+            {
+                using (var owner = new Form { ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
+                using (var dialog = new Form { ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
+                {
+                    owner.Show();
+                    dialog.Show(owner);
+                    Equal(owner.Handle, WindowLock.RootOwner(dialog.Handle), "owned dialog -> owner");
+                    Equal(owner.Handle, WindowLock.RootOwner(owner.Handle), "a top-level window is its own root");
+                    Equal(IntPtr.Zero, WindowLock.RootOwner(IntPtr.Zero), "no window");
+                    True(!WindowLock.FromHandle(owner.Handle).Restricted, "our own process can be inspected");
+                }
+            });
+
+            Test("indicator: a long text is capped and never grows past the screen corner", () =>
+            {
+                using (var hud = new Hud())
+                {
+                    hud.Display(Color.Lime, new string('W', 200), new Rectangle(-20000, -20000, 1920, 1080), HudCorner.TopLeft);
+                    True(hud.Width <= Theme.Dp(360), "width " + hud.Width);
+                }
+                var settings = new ClickSettings { LockExe = "Game.exe", LockName = new string('x', 100) };
+                settings.Validate();
+                Equal(40, settings.LockName.Length, "saved app names are kept short");
+            });
+
+            Test("segmented: screen readers get the selected text as the value", () =>
+            {
+                using (var segmented = new Segmented { Items = new[] { "CPS", "Intervalo" } })
+                {
+                    segmented.SelectedIndex = 1;
+                    Equal("Intervalo", segmented.AccessibilityObject.Value, "value");
+                    Equal(AccessibleRole.ComboBox, segmented.AccessibilityObject.Role, "role");
+                }
+            });
+
             Test("indicator: never activates, lets clicks through and stays out of Alt+Tab", () =>
             {
                 const int Transparent = 0x20, NoActivate = 0x8000000, ToolWindow = 0x80, TopMost = 0x8;
@@ -836,6 +946,33 @@ namespace VClicker.Tests
                 }
             });
 
+            Test("number field: a stand-in text is never replaced by a stale value", () =>
+            {
+                using (var field = new NumberField { Minimum = 0.1, Maximum = 1000, Decimals = 1 })
+                {
+                    var box = (TextBox)field.Controls[0];
+                    int changes = 0;
+                    field.ValueChanged += delegate { changes++; };
+                    field.Number = 15;
+                    field.ShowText("< 0,1");
+                    box.Text = "";
+                    field.Commit();
+                    Equal(0, changes, "clearing the box and leaving applies nothing");
+                    Equal("< 0,1", box.Text, "the stand-in text comes back");
+                    field.ShowText("< 0,1");
+                    box.Focus();
+                    SendKeys(box, Keys.Down);
+                    Equal(1, changes, "stepping from a stand-in always applies what is now shown");
+                    Equal(0.1, field.Number, "steps from the bottom of the range");
+                }
+            });
+
+            Test("speed text: a very slow interval never reads as 0 CPS", () =>
+            {
+                True(!MainForm.FormatCps(1.0 / 300).StartsWith("0"), "5 min interval: " + MainForm.FormatCps(1.0 / 300));
+                Equal(15.0.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture), MainForm.FormatCps(15), "15 CPS");
+            });
+
             Test("window: a screen shorter than the window caps the height and scrolls", () =>
             {
                 string path = TempFile();
@@ -877,6 +1014,16 @@ namespace VClicker.Tests
                 finally { File.Delete(path); }
             });
         }
+
+        /// <summary>Delivers a key to a text box the way the keyboard would (KeyDown handlers run).</summary>
+        private static void SendKeys(TextBox box, Keys key)
+        {
+            const int WM_KEYDOWN = 0x100;
+            SendMessage(box.Handle, WM_KEYDOWN, (IntPtr)(int)key, IntPtr.Zero);
+        }
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
 
         private static string Placeholders(string text)
         {

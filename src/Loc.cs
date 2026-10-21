@@ -46,7 +46,7 @@ namespace VClicker
             ["stat.requested"] = new[] { "SOLICITADO", "REQUESTED" },
             ["stat.sent"] = new[] { "ENVIADO", "SENT" },
             ["stat.time"] = new[] { "TEMPO", "TIME" },
-            ["stat.note"] = new[] { "CPS enviados ao Windows; o jogo pode reconhecer menos.", "CPS sent to Windows; the game may register fewer." },
+            ["stat.note"] = new[] { "Cliques e CPS enviados ao Windows (duplo conta 1); o jogo pode reconhecer menos.", "Clicks and CPS sent to Windows (a double click counts as 1); the game may register fewer." },
 
             // interval
             ["card.interval"] = new[] { "VELOCIDADE DOS CLIQUES", "CLICK SPEED" },
@@ -125,6 +125,7 @@ namespace VClicker
             ["hud.focusLost"] = new[] { "Foco perdido", "Focus lost" },
             ["hud.timeout"] = new[] { "Pausa longa demais", "Paused too long" },
             ["hud.blocked"] = new[] { "Clique recusado", "Click refused" },
+            ["hud.elevated"] = new[] { "Precisa de admin", "Needs admin" },
 
             // options / footer
             ["opt.top"] = new[] { "Sempre no topo", "Always on top" },
@@ -152,6 +153,7 @@ namespace VClicker
             ["msg.lockFocus"] = new[] { "Ative a janela de {0} para começar.", "Switch to the {0} window to start." },
             ["msg.lockNotOpen"] = new[] { "Abra {0} para começar.", "Open {0} to start." },
             ["msg.lockFocusFailed"] = new[] { "O Windows não deixou trazer {0} para a frente. Clique nele e use {1}.", "Windows would not bring {0} to the front. Click it and press {1}." },
+            ["msg.lockElevated"] = new[] { "{0} roda como administrador: use \"Reiniciar como admin\" para clicar nele.", "{0} runs as administrator: use \"Restart as admin\" to click in it." },
             ["msg.lockOutside"] = new[] { "A posição fixa está fora da janela de {0}.", "The fixed spot is outside the {0} window." },
             ["msg.focusLost"] = new[] { "{0} perdeu o foco e o V-Clicker parou.", "{0} lost focus and V-Clicker stopped." },
             ["msg.targetClosed"] = new[] { "A janela de {0} foi fechada e o V-Clicker parou.", "The {0} window was closed and V-Clicker stopped." },

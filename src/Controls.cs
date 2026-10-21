@@ -182,7 +182,29 @@ namespace VClicker
                 if (clamped == selected) return;
                 selected = clamped;
                 Invalidate();
+                AccessibilityNotifyClients(AccessibleEvents.ValueChange, -1);
                 SelectedChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        /// <summary>Screen readers hear which segment is selected (its text is the value).</summary>
+        protected override AccessibleObject CreateAccessibilityInstance() => new SegmentedAccessibleObject(this);
+
+        private sealed class SegmentedAccessibleObject : ControlAccessibleObject
+        {
+            private readonly Segmented owner;
+
+            public SegmentedAccessibleObject(Segmented owner) : base(owner)
+            {
+                this.owner = owner;
+            }
+
+            public override AccessibleRole Role => AccessibleRole.ComboBox;
+
+            public override string Value
+            {
+                get => owner.items.Length == 0 ? string.Empty : owner.items[owner.selected];
+                set { }
             }
         }
 
@@ -381,6 +403,12 @@ namespace VClicker
         public void Commit()
         {
             if (shownText != null && box.Text == shownText) return;
+            if (shownText != null && !TryParse(box.Text, out _))
+            {
+                // The stored number is stale behind a stand-in text: never apply it, put the stand-in back.
+                box.Text = shownText;
+                return;
+            }
             double clamped = TryParse(box.Text, out double parsed) ? Clamp(parsed) : number;
             // While a stand-in text was shown the stored number is stale: anything typed is a change.
             bool changed = clamped != number || shownText != null;
@@ -409,11 +437,13 @@ namespace VClicker
 
         private void Step(int direction, int amount)
         {
+            bool standIn = shownText != null;
             Commit();
-            if (shownText != null) number = minimum; // stepping from a stand-in text starts at the bottom
+            if (standIn) number = minimum; // stepping from a stand-in text starts at the bottom of the range
             double before = number;
             Number = number + (double)direction * amount;
-            if (number != before) ValueChanged?.Invoke(this, EventArgs.Empty);
+            // From a stand-in the shown value always differs from what was applied, even if the number did not move.
+            if (standIn || number != before) ValueChanged?.Invoke(this, EventArgs.Empty);
             box.SelectAll();
         }
 
@@ -798,7 +828,8 @@ namespace VClicker
                 g.FillEllipse(brush, 12 * k, (Height - d) / 2, d, d);
             var area = new Rectangle((int)(26 * k), 0, Width - (int)(34 * k), Height);
             TextRenderer.DrawText(g, Text, Font, area, Theme.Text,
-                TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+                TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix |
+                TextFormatFlags.EndEllipsis);
         }
     }
 

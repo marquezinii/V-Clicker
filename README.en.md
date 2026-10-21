@@ -86,7 +86,7 @@ src/             the app (WinForms, .NET Framework 4.8, no third-party dependenc
   Settings.cs      .ini settings with validation and a safe fallback
   MainForm.cs      main window;  Controls.cs / Theme.cs  dark controls and theme
   Loc.cs           Portuguese and English strings
-tests/           dependency-free test runner (52 unit tests + 4 integration tests)
+tests/           dependency-free test runner (61 unit tests + 4 integration tests)
 assets/          official icon
 docs/            screenshots
 ```

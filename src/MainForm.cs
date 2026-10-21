@@ -62,8 +62,8 @@ namespace VClicker
 
         private bool loading, saveWarned;
         private StopReason? lastStop;
-        private double cps;
-        private long lastSampleStamp, lastSampleClicks, noticeExpires;
+        private readonly RateMeter sentRate = new RateMeter();
+        private long noticeExpires;
         private int captureSecondsLeft;
 
         public MainForm(string settingsPath) : this(settingsPath, new SendInputSink())
@@ -611,7 +611,7 @@ namespace VClicker
             // Honest about what is measured: what Windows accepted, not what the game recognised.
             Label sentNote = Lbl("stat.note", 8f, dim: true);
             sentNote.Margin = Theme.Pad(0, 0, 0, 10);
-            sentNote.MaximumSize = new Size(Theme.Dp(320), 0);
+            sentNote.MaximumSize = new Size(Theme.Dp(300), 0);
             FullRow(body, sentNote);
 
             startButton = new FlatButton
@@ -624,7 +624,7 @@ namespace VClicker
 
             notice = new Label
             {
-                AutoSize = false, Height = Theme.Dp(38), Dock = DockStyle.Fill, Font = Theme.Ui(9f), ForeColor = Theme.Dim,
+                AutoSize = false, AutoEllipsis = true, Height = Theme.Dp(38), Dock = DockStyle.Fill, Font = Theme.Ui(9f), ForeColor = Theme.Dim,
                 BackColor = Theme.Surface, Margin = Theme.Pad(0, 0, 0, 6), UseMnemonic = false
             };
             FullRow(body, notice);
@@ -743,7 +743,7 @@ namespace VClicker
             trayShow = new ToolStripMenuItem();
             trayShow.Click += delegate { ShowFromTray(); };
             trayToggle = new ToolStripMenuItem();
-            trayToggle.Click += delegate { Toggle(false); };
+            trayToggle.Click += delegate { if (Enabled) Toggle(false); }; // not while a dialog of ours is open
             trayExit = new ToolStripMenuItem();
             trayExit.Click += delegate { Close(); };
 
@@ -925,8 +925,10 @@ namespace VClicker
             rateLabel.Text = text;
         }
 
-        private static string FormatCps(double value) =>
-            value.ToString(value >= 100 ? "0" : value >= 1 ? "0.0" : "0.##", CultureInfo.CurrentCulture);
+        internal static string FormatCps(double value) =>
+            value >= 0.01
+                ? value.ToString(value >= 100 ? "0" : value >= 1 ? "0.0" : "0.##", CultureInfo.CurrentCulture)
+                : "< " + 0.01.ToString("0.##", CultureInfo.CurrentCulture); // a 5-min interval is not "0 CPS"
 
         private void UpdateEnabledState()
         {
@@ -1004,12 +1006,14 @@ namespace VClicker
                 plan.StartDelayMs = 0;
             }
 
-            IntPtr screenOf = WindowLock.Foreground();
             lockedWindow = IntPtr.Zero;
+            // The indicator goes on the screen where the clicks will land.
+            hudScreen = Screen.FromPoint(plan.FixedPosition ?? Cursor.Position).Bounds;
             if (settings.WindowLock)
             {
                 AppWindow target = FindLockTarget(fromHotkey);
                 if (target == null) return; // refused (and told why) or cancelled
+                if (engine.Phase != EnginePhase.Idle) return; // started meanwhile (the picker was open)
                 if (plan.FixedPosition.HasValue &&
                     WindowLock.Check(target.Handle, target.ProcessId, plan.FixedPosition) == LockStatus.PointOutside)
                 {
@@ -1020,14 +1024,12 @@ namespace VClicker
                 uint process = target.ProcessId;
                 plan.Lock = at => WindowLock.Check(window, process, at);
                 plan.StopOnFocusLoss = settings.LockStopOnFocusLoss;
-                lockedWindow = screenOf = window;
+                lockedWindow = window;
+                hudScreen = Screen.FromHandle(window).Bounds;
             }
-            hudScreen = Screen.FromHandle(screenOf).Bounds;
 
             lastStop = null;
-            cps = 0;
-            lastSampleStamp = Stopwatch.GetTimestamp();
-            lastSampleClicks = 0;
+            sentRate.Reset();
             ShowHint();
             if (!engine.Start(plan)) return;
 
@@ -1053,10 +1055,14 @@ namespace VClicker
             }
             if (fromHotkey)
             {
-                AppWindow front = WindowLock.FromHandle(WindowLock.Foreground());
-                if (front != null && front.ExeName.Equals(settings.LockExe, StringComparison.OrdinalIgnoreCase)) return front;
-                Refuse(Loc.F("msg.lockFocus", name), Loc.F("hud.switchTo", name));
-                return null;
+                // A game's own dialog in front still counts as the game: bind to its top-level window.
+                AppWindow front = WindowLock.FromHandle(WindowLock.RootOwner(WindowLock.Foreground()));
+                if (front == null || !front.ExeName.Equals(settings.LockExe, StringComparison.OrdinalIgnoreCase))
+                {
+                    Refuse(Loc.F("msg.lockFocus", name), Loc.F("hud.switchTo", name));
+                    return null;
+                }
+                return Accessible(front) ? front : null;
             }
 
             List<AppWindow> windows = WindowLock.List(settings.LockExe);
@@ -1066,7 +1072,7 @@ namespace VClicker
                 return null;
             }
             AppWindow chosen = windows.Count == 1 ? windows[0] : WindowPicker.Pick(this, Loc.F("picker.which", name), windows);
-            if (chosen == null) return null;
+            if (chosen == null || !Accessible(chosen)) return null;
             if (!WindowLock.BringToFront(chosen.Handle))
             {
                 Refuse(Loc.F("msg.lockFocusFailed", name, hkToggle.Value), Loc.F("hud.switchTo", name));
@@ -1075,11 +1081,22 @@ namespace VClicker
             return chosen;
         }
 
+        /// <summary>
+        /// Windows silently drops clicks a normal process sends to an elevated one, so refuse up front and say
+        /// how to fix it, rather than "click" with no effect.
+        /// </summary>
+        private bool Accessible(AppWindow target)
+        {
+            if (!target.Restricted || IsElevated()) return true;
+            Refuse(Loc.F("msg.lockElevated", settings.LockName), Loc.T("hud.elevated"));
+            return false;
+        }
+
         private void Refuse(string message, string hudText)
         {
             ShowNotice(message, Theme.Warning, 8);
             ErrorBeep();
-            FlashHud(hudText, WindowLock.Foreground());
+            FlashHud(hudText, WindowLock.Foreground()); // where the user is looking now
         }
 
         private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
@@ -1109,6 +1126,13 @@ namespace VClicker
 
         private void HandleStopped(StopReason reason)
         {
+            // Queued from the engine thread: a new run may have started since. Its state wins; this stop is old news.
+            if (engine.Phase != EnginePhase.Idle)
+            {
+                UpdateEnabledState();
+                UpdateStartButton();
+                return;
+            }
             lastStop = reason;
             UpdateEnabledState();
             UpdateStartButton();
@@ -1148,9 +1172,8 @@ namespace VClicker
             }
             if (error) ErrorBeep();
             else Beep(false);
-            FlashHud(hudText, lockedWindow != IntPtr.Zero ? lockedWindow : WindowLock.Foreground());
-            // This handler is queued; a new run may already have started and bound its own window.
-            if (engine.Phase == EnginePhase.Idle) lockedWindow = IntPtr.Zero;
+            FlashHud(hudText, IntPtr.Zero); // on the run's screen: a closed window has no screen to ask
+            lockedWindow = IntPtr.Zero;
             RefreshStats();
         }
 
@@ -1251,9 +1274,10 @@ namespace VClicker
             {
                 switch (m.WParam.ToInt32())
                 {
-                    case IdToggle: Toggle(true); break;
+                    // While a dialog of ours is open (the app picker) only Stop works: nothing may start under it.
+                    case IdToggle: if (Enabled || engine.Phase != EnginePhase.Idle) Toggle(true); break;
                     case IdStop: engine.Stop(); break;
-                    case IdCapture: CapturePosition(); break;
+                    case IdCapture: if (Enabled) CapturePosition(); break;
                 }
                 return;
             }
@@ -1285,15 +1309,17 @@ namespace VClicker
             requestedValue.Text = FormatCps(Interval.ClicksPerSecond(settings.IntervalMs));
 
             long now = Stopwatch.GetTimestamp();
-            double seconds = (now - lastSampleStamp) / (double)Stopwatch.Frequency;
-            if (seconds >= 0.25)
+            if (phase == EnginePhase.Clicking)
             {
-                double instant = (clicks - lastSampleClicks) / seconds;
-                cps = phase != EnginePhase.Clicking ? 0 : cps <= 0 ? instant : cps * 0.4 + instant * 0.6;
-                lastSampleStamp = now;
-                lastSampleClicks = clicks;
+                // Average over a few intervals (at least 2 s) so slow and fast rates both read steadily.
+                double sent = sentRate.Sample(clicks, engine.LastClickStamp, Math.Max(2, 3 * settings.IntervalMs / 1000));
+                sentValue.Text = double.IsNaN(sent) ? "\u2014" : FormatCps(sent);
             }
-            sentValue.Text = phase == EnginePhase.Clicking ? FormatCps(cps) : "\u2014";
+            else
+            {
+                sentRate.Reset(); // after a pause, measure the resumed clicking only
+                sentValue.Text = "\u2014";
+            }
 
             switch (phase)
             {
@@ -1319,7 +1345,8 @@ namespace VClicker
                                : Loc.T("status.idle");
                     break;
             }
-            badge.Size = badge.GetPreferredSize(Size.Empty);
+            Size badgeSize = badge.GetPreferredSize(Size.Empty);
+            badge.Size = new Size(Math.Min(badgeSize.Width, Theme.Dp(300)), badgeSize.Height); // long app names end in "…"
             UpdateTray(phase);
             UpdateHud(phase);
 

@@ -20,6 +20,11 @@ namespace VClicker
         /// <summary>Friendly app name ("Roblox"): the file description, else the exe name without extension.</summary>
         public string DisplayName = string.Empty;
         public string Title = string.Empty;
+        /// <summary>
+        /// V-Clicker may not inspect this process (it runs as administrator, or is protected); the name comes from
+        /// the process list instead. Windows also drops synthetic clicks sent to such a window from a normal process.
+        /// </summary>
+        public bool Restricted;
     }
 
     /// <summary>
@@ -34,6 +39,7 @@ namespace VClicker
         private const int DWMWA_CLOAKED = 14;
         private const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
         private const int SW_RESTORE = 9;
+        private const uint GA_ROOT = 2;
 
         private delegate bool EnumWindowsProc(IntPtr window, IntPtr data);
 
@@ -74,7 +80,10 @@ namespace VClicker
         private static extern bool SetForegroundWindow(IntPtr window);
 
         [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr window, int command);
+        private static extern bool ShowWindowAsync(IntPtr window, int command);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetAncestor(IntPtr window, uint flags);
 
         [DllImport("user32.dll")]
         private static extern bool GetClientRect(IntPtr window, out RECT rect);
@@ -103,6 +112,25 @@ namespace VClicker
         public static IntPtr Foreground() => GetForegroundWindow();
 
         /// <summary>
+        /// The visible window that owns <paramref name="window"/> (a game's dialog belongs to the game window).
+        /// Only visible owners count: many programs own their windows from a hidden one (to stay off the taskbar),
+        /// and a run bound to a hidden window would never see it in front.
+        /// </summary>
+        public static IntPtr RootOwner(IntPtr window)
+        {
+            if (window == IntPtr.Zero) return IntPtr.Zero;
+            IntPtr root = GetAncestor(window, GA_ROOT);
+            IntPtr current = root == IntPtr.Zero ? window : root;
+            for (int depth = 0; depth < 32; depth++) // owner chains are short; never loop forever on a broken one
+            {
+                IntPtr owner = GetWindow(current, GW_OWNER);
+                if (owner == IntPtr.Zero || !IsWindowVisible(owner)) break;
+                current = owner;
+            }
+            return current;
+        }
+
+        /// <summary>
         /// The windows a person would call "an app": visible, titled, not owned by another window, not a tool
         /// window, not hidden by the shell ("cloaked"), not V-Clicker, not a Store app host.
         /// </summary>
@@ -110,15 +138,17 @@ namespace VClicker
         public static List<AppWindow> List(string exeName = null)
         {
             var found = new List<AppWindow>();
-            uint self = (uint)Process.GetCurrentProcess().Id;
+            uint self;
+            using (Process current = Process.GetCurrentProcess()) self = (uint)current.Id;
             EnumWindows((window, data) =>
             {
                 if (!IsCandidate(window)) return true;
-                AppWindow app = FromHandle(window);
-                if (app == null || app.ProcessId == self) return true;
-                if (app.ExeName.Equals("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase)) return true;
-                if (exeName != null && !app.ExeName.Equals(exeName, StringComparison.OrdinalIgnoreCase)) return true;
-                found.Add(app);
+                GetWindowThreadProcessId(window, out uint processId);
+                if (processId == self) return true;
+                // The exe filter runs before the (slower) file description is read.
+                AppWindow app = Describe(window, processId, exeName);
+                if (app != null && !app.ExeName.Equals("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase))
+                    found.Add(app);
                 return true;
             }, IntPtr.Zero);
             return found;
@@ -138,22 +168,44 @@ namespace VClicker
         {
             if (window == IntPtr.Zero || !IsWindow(window)) return null;
             GetWindowThreadProcessId(window, out uint processId);
+            return Describe(window, processId, null);
+        }
+
+        private static AppWindow Describe(IntPtr window, uint processId, string exeFilter)
+        {
             string path = ProcessPath(processId);
-            if (path == null) return null;
+            bool restricted = path == null;
+            string exe = restricted ? ProcessExeName(processId) : Path.GetFileName(path);
+            if (!ClickSettings.IsExeFileName(exe)) return null; // gone, or not something Window Lock can save
+            if (exeFilter != null && !exe.Equals(exeFilter, StringComparison.OrdinalIgnoreCase)) return null;
 
             var title = new StringBuilder(GetWindowTextLength(window) + 1);
             GetWindowText(window, title, title.Capacity);
-            string exe = Path.GetFileName(path);
             string name = null;
-            try { name = FileVersionInfo.GetVersionInfo(path).FileDescription; }
-            catch (FileNotFoundException) { }
-            catch (UnauthorizedAccessException) { }
+            if (!restricted)
+            {
+                try { name = FileVersionInfo.GetVersionInfo(path).FileDescription; }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+                catch (ArgumentException) { }
+            }
             if (string.IsNullOrWhiteSpace(name)) name = Path.GetFileNameWithoutExtension(exe);
             return new AppWindow
             {
-                Handle = window, ProcessId = processId, ExePath = path, ExeName = exe,
-                DisplayName = name.Trim(), Title = title.ToString()
+                Handle = window, ProcessId = processId, ExePath = path ?? string.Empty, ExeName = exe,
+                DisplayName = name.Trim(), Title = title.ToString(), Restricted = restricted
             };
+        }
+
+        /// <summary>The exe name from the process list, which needs no access to the process itself.</summary>
+        private static string ProcessExeName(uint processId)
+        {
+            try
+            {
+                using (Process process = Process.GetProcessById((int)processId)) return process.ProcessName + ".exe";
+            }
+            catch (ArgumentException) { return null; }          // exited
+            catch (InvalidOperationException) { return null; }  // exited while reading
         }
 
         private static string ProcessPath(uint processId)
@@ -162,7 +214,7 @@ namespace VClicker
             if (process == IntPtr.Zero) return null;
             try
             {
-                var path = new StringBuilder(1024);
+                var path = new StringBuilder(32767); // long-path aware: the documented maximum
                 int size = path.Capacity;
                 return QueryFullProcessImageName(process, 0, path, ref size) ? path.ToString(0, size) : null;
             }
@@ -199,11 +251,12 @@ namespace VClicker
         public static bool BringToFront(IntPtr window)
         {
             if (!IsWindow(window)) return false;
-            if (IsIconic(window)) ShowWindow(window, SW_RESTORE);
-            SetForegroundWindow(window);
+            // Async: a hung target must not freeze V-Clicker's window.
+            if (IsIconic(window)) ShowWindowAsync(window, SW_RESTORE);
             // ponytail: short blocking wait on the UI thread (at most ~0.5 s, only when the button is used).
             for (int i = 0; i < 25; i++)
             {
+                SetForegroundWindow(window);
                 if (GetForegroundWindow() == window) return true;
                 Thread.Sleep(20);
             }

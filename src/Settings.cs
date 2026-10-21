@@ -60,7 +60,7 @@ namespace VClicker
         /// <summary>Clamps every value into its supported range and repairs invalid or clashing hotkeys.</summary>
         public void Validate()
         {
-            IntervalMs = double.IsNaN(IntervalMs) ? 100 : Interval.Clamp(IntervalMs);
+            IntervalMs = Interval.Clamp(IntervalMs);
             JitterPercent = Math.Max(0, Math.Min(50, JitterPercent));
             if (!Enum.IsDefined(typeof(ClickButton), Button)) Button = ClickButton.Left;
             RepeatCount = Math.Max(0, Math.Min(1000000000, RepeatCount));
@@ -70,7 +70,7 @@ namespace VClicker
             if (Language != "pt" && Language != "en") Language = "auto";
             if (!Enum.IsDefined(typeof(HudCorner), HudCorner)) HudCorner = HudCorner.TopRight;
             LockExe = IsExeFileName(LockExe) ? LockExe.Trim() : string.Empty;
-            LockName = Printable(LockName, 100);
+            LockName = Printable(LockName, 40); // shown in the badge and the indicator: keep it short
             if (LockName.Length == 0 && LockExe.Length > 0) LockName = Path.GetFileNameWithoutExtension(LockExe);
 
             if (!ToggleKey.IsAcceptable) ToggleKey = DefaultToggle;
@@ -154,8 +154,8 @@ namespace VClicker
         internal IEnumerable<string> Serialize()
         {
             yield return "; V-Clicker settings - safe to edit while the app is closed.";
-            // "R" round-trips the exact double: 1000/15 reads back as the same rate.
-            yield return "IntervalMs=" + IntervalMs.ToString("R", CultureInfo.InvariantCulture);
+            // "G17" round-trips the exact double (1000/15 reads back as the same rate); "R" can fail on x64 .NET Framework.
+            yield return "IntervalMs=" + IntervalMs.ToString("G17", CultureInfo.InvariantCulture);
             yield return "SpeedInCps=" + SpeedInCps;
             yield return "JitterPercent=" + Number(JitterPercent);
             yield return "Button=" + Button;

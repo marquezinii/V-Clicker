@@ -14,6 +14,16 @@ All notable changes to this project are documented here. The format follows
 - Speed in **clicks per second** (default) or as an interval; presets 5 / 10 / 15 / 20 / 50 CPS.
 - Live panel compares **requested** CPS with CPS **sent to Windows**.
 
+### Fixed (audit of Window Lock and the click engine)
+- After a Window Lock pause, clicking resumes only once the app has been back in front for 0.2 s (no Alt+click right after Alt+Tab), and never sooner than the interval after the previous click.
+- Strict mode ("stop on focus loss") ignores focus blips shorter than 0.1 s instead of ending the run.
+- The "sent" CPS is measured from the actual click times: steady and exact from 0.1 to 1000 CPS (it used to read 0 or spike at slow rates).
+- The CPS field never applies a stale value after showing "< 0.1"; slow speeds no longer read as "0 CPS".
+- A game's own dialog in front counts as the game; elevated games are refused with a "Restart as admin" hint instead of silently ignoring clicks; Store hosts and non-.exe processes are not listed; the picker shows the process id and works when started from the tray.
+- A late "stopped" message can no longer overwrite a run that already started again; hotkeys cannot start a run under the app picker.
+- A fault on the click thread stops the run instead of closing the app; a failed cursor move counts as a refused click; an invalid interval is never treated as "as fast as possible".
+- Long app names are shortened in the badge and the indicator; the indicator stays on the screen where the clicks land.
+
 ### Changed
 - The interval is stored with fractional milliseconds (15 CPS is exactly 66.667 ms). Older settings files load unchanged.
 - The elapsed time shown is the session time; the clicking time excludes pauses.

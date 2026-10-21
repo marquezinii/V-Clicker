@@ -67,7 +67,7 @@ namespace VClicker
         /// <summary>Shows (or updates) the pill; does nothing when nothing changed.</summary>
         public void Display(Color color, string text, Rectangle screen, HudCorner corner)
         {
-            Size size = new Size(TextRenderer.MeasureText(text, Font).Width + Theme.Dp(44), Theme.Dp(32));
+            Size size = new Size(Math.Min(TextRenderer.MeasureText(text, Font).Width + Theme.Dp(44), Theme.Dp(360)), Theme.Dp(32));
             int margin = Theme.Dp(16);
             bool right = corner == HudCorner.TopRight || corner == HudCorner.BottomRight;
             bool bottom = corner == HudCorner.BottomLeft || corner == HudCorner.BottomRight;
@@ -111,7 +111,8 @@ namespace VClicker
                 g.FillEllipse(brush, Theme.Dp(14), (Height - d) / 2, d, d);
             var area = new Rectangle(Theme.Dp(30), 0, Width - Theme.Dp(40), Height);
             TextRenderer.DrawText(g, Text, Font, area, Theme.Text,
-                TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+                TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix |
+                TextFormatFlags.EndEllipsis);
         }
     }
 }

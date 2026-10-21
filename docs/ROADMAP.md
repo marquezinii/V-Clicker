@@ -39,6 +39,12 @@ entrar; o teste de integração e a revisão de código reproduziram isso.
 Opção futura: só clicar se a janela sob o cursor pertencer à janela vinculada; caso contrário, pausar como "ponto fora
 da janela". Desligada por padrão, com um aviso de que pode interferir em jogos que manipulam o cursor.
 
+### Window Lock: seguir a janela quando o jogo a recria
+
+Hoje, se o aplicativo fecha e reabre a própria janela (alguns jogos fazem isso ao alternar a tela cheia, ou passam por
+uma janela de abertura com o mesmo executável), a sessão para como "janela fechada". Opção futura: por 2 a 3 s, procurar
+outra janela do mesmo processo ou executável e continuar nela.
+
 ## Fase de produtividade
 
 Planejamento próprio, depois de consolidar a experiência casual. Ficam isoladas em uma aba ou modo avançado; o usuário

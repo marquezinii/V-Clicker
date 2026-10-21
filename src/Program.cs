@@ -104,10 +104,19 @@ namespace VClicker
             catch (UnauthorizedAccessException) { }
         }
 
+        private static bool reporting;
+
+        /// <summary>One dialog at a time: a fault in a timer tick would otherwise stack a dialog per tick.</summary>
         private static void ReportCrash(Exception error)
         {
-            MessageBox.Show(Loc.F("msg.crash", error.Message), "V-Clicker",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (reporting) return;
+            reporting = true;
+            try
+            {
+                MessageBox.Show(Loc.F("msg.crash", error.Message), "V-Clicker",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally { reporting = false; }
         }
     }
 }
