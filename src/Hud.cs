@@ -17,8 +17,12 @@ namespace VClicker
         private const int WS_EX_LAYERED = 0x80000, WS_EX_TRANSPARENT = 0x20, WS_EX_NOACTIVATE = 0x8000000;
         private const int WS_EX_TOOLWINDOW = 0x80, WS_EX_TOPMOST = 0x8;
         private const int WM_MOUSEACTIVATE = 0x21, MA_NOACTIVATE = 3;
+        private const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
         private const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10;
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetWindowDisplayAffinity(IntPtr window, uint affinity);
 
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
@@ -43,6 +47,13 @@ namespace VClicker
         internal const int ExStyles = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
 
         protected override bool ShowWithoutActivation => true;
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            // Left out of screenshots (Windows 10 2004+; ignored before), so it never hides a Smart Target image.
+            SetWindowDisplayAffinity(Handle, WDA_EXCLUDEFROMCAPTURE);
+        }
 
         protected override CreateParams CreateParams
         {

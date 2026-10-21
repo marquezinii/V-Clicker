@@ -23,7 +23,8 @@ A single `.exe`: no installer, no telemetry, no network.
 - **Speed in CPS** (clicks per second, one decimal) or as an **interval in h / min / s / ms**: both edit the same speed, with no rounding (15 CPS = 66.667 ms). Presets `5`, `10`, `15`, `20` and `50 CPS`.
 - **Window Lock**: pick an app (e.g. Roblox) and V-Clicker only clicks while it is in front. On Alt+Tab it **pauses and resumes by itself** when you come back (or stops, if you prefer). F6 only starts with the app in front; the *Start* button brings it to the front. It stops for good if the window closes, if a pause lasts over 5 minutes, or if the PC is locked or goes to sleep.
 - **Macro Studio** (its own window, button at the top): click *Record*, choose the app and do the task once. Every click, key, text and wait becomes a plain-language step (`Click (left) at 812, 440`, `Wait 8 s`, `Type "Report"`) that you can edit, save and repeat N times or until you stop it. A macro only acts on the window it was recorded in (and its dialogs): if another window comes to the front, it pauses; F8 stops everything at once. Long waits can be shortened, always with your confirmation and with the recorded time kept. Password fields are not recorded, and running stops at that point. In browsers, switching tabs inside the same window is not detected.
-- **Wait until… (Conditional Click)**, in Macro Studio: turn a recorded wait (or insert one from scratch) into "wait until the *Download PDF* button is available", "until this point's colour shows up" or "until the *Save as* window opens". The macro moves on as soon as the condition is confirmed (two reads in a row) and stops before the next step if the time limit runs out. Time with another window in front does not count; a doubtful read never lets the macro through. You can go back to the original wait. It watches a fixed point of the window (finding the element elsewhere is Smart Target, the next stage).
+- **Wait until… (Conditional Click)**, in Macro Studio: turn a recorded wait (or insert one from scratch) into "wait until the *Download PDF* button is available", "until this point's colour shows up" or "until the *Save as* window opens". The macro moves on as soon as the condition is confirmed (two reads in a row) and stops before the next step if the time limit runs out. Time with another window in front does not count; a doubtful read never lets the macro through. You can go back to the original wait. An element is waited for wherever it is in the window; a colour is watched at a fixed point.
+- **Smart target**, in Macro Studio: a recorded click looks for *what* to click instead of *where*. Point at the button and press F7; the V-Clicker recognizes it **by name** (Windows accessibility; works in Chrome/Edge and most programs) or **by appearance** (a small region of the screen, for games and programs without names) and shows a preview. Before every click, the macro looks for the target and only clicks when it finds **exactly one**, still, enabled and itself under the click point. Two candidates, a disabled or covered target, or nothing found within the time limit (10 s by default): the macro stops without clicking and says why. The recorded point is never a fallback, but you can go back to it.
 - **Random variation** (±0–50 %) for less mechanical clicking.
 - **Left, middle or right button**, **single or double** click.
 - **Repeat forever or N times** (up to 1 billion); it stops by itself when done.
@@ -85,12 +86,14 @@ src/             the app (WinForms, .NET Framework 4.8, no third-party dependenc
   WindowLock.cs    Windows windows for Window Lock (list, focus, window area);  WindowPicker.cs  app chooser
   Macro*.cs        Macro Studio: .vcmacro format, recorder (hooks only while recording), step rules,
                    bound window, player with a check before every step, "wait until" conditions, and the Studio window
+  SmartTargets.cs  smart target: UI Automation search, screenshots, the check before the click, the F7 probe
+  ImageTarget.cs   image recognition (normalized correlation in 8 px cells; pure, testable functions)
   Hud.cs           on-screen indicator (separate window, click-through, never takes focus)
   Hotkey.cs        global hotkeys (RegisterHotKey) and validation
   Settings.cs      .ini settings with validation and a safe fallback
   MainForm.cs      main window;  Controls.cs / Theme.cs  dark controls and theme
   Loc.cs           Portuguese and English strings
-tests/           dependency-free test runner (93 unit tests + 7 integration tests)
+tests/           dependency-free test runner (99 unit tests + 8 integration tests)
 assets/          official icon
 docs/            screenshots
 ```

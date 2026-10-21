@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -13,6 +14,57 @@ namespace VClicker
 
     /// <summary>What a "wait until" step watches (see docs/superpowers/specs/2026-10-22-conditional-click-design.md).</summary>
     internal enum ConditionKind { Element, Color, Window }
+
+    internal enum TargetKind { Element, Image }
+
+    /// <summary>
+    /// What a click step clicks, found anew before every click instead of a fixed point
+    /// (see docs/superpowers/specs/2026-10-23-smart-target-design.md).
+    /// </summary>
+    internal sealed class SmartTarget
+    {
+        public const int DefaultTimeoutMs = 10 * 1000;
+
+        public TargetKind Kind;
+        /// <summary>Element: the UI Automation control type ("Button"), name, and automation id (only when needed to tell it apart).</summary>
+        public string ControlType = string.Empty, Name = string.Empty, AutomationId = string.Empty;
+        /// <summary>Image: a square PNG of one of <see cref="ImageTarget.Sides"/>. Never changed in place.</summary>
+        public byte[] Png;
+        /// <summary>How long to look for it before the macro stops.</summary>
+        public int TimeoutMs = DefaultTimeoutMs;
+
+        public SmartTarget Clone() => (SmartTarget)MemberwiseClone();
+
+        /// <summary>The image as a new 32-bit bitmap (the caller disposes it); null if it is not a valid target image.</summary>
+        public Bitmap Decode() => DecodeImage(Png);
+
+        internal static Bitmap DecodeImage(byte[] png)
+        {
+            if (png == null || png.Length == 0) return null;
+            try
+            {
+                using (var stream = new MemoryStream(png))
+                using (var image = new Bitmap(stream))
+                {
+                    if (image.Width != image.Height || Array.IndexOf(ImageTarget.Sides, image.Width) < 0) return null;
+                    return image.Clone(new Rectangle(0, 0, image.Width, image.Height), PixelFormat.Format32bppArgb);
+                }
+            }
+            catch (Exception error) when (error is ArgumentException || error is System.Runtime.InteropServices.ExternalException || error is OutOfMemoryException)
+            {
+                return null; // not an image, or a damaged one (GDI+ reports some of those as out of memory)
+            }
+        }
+
+        internal static byte[] EncodeImage(Bitmap image)
+        {
+            using (var stream = new MemoryStream())
+            {
+                image.Save(stream, ImageFormat.Png);
+                return stream.ToArray();
+            }
+        }
+    }
 
     /// <summary>
     /// A window of the macro's app other than the bound one (a dialog like "Save as", a menu), by class and title.
@@ -73,6 +125,11 @@ namespace VClicker
         public int WasMs, WasRecordedMs;
         /// <summary>The condition came from a wait and can turn back into it (false = inserted from scratch).</summary>
         public bool Reverts;
+        /// <summary>Element: the automation id, when name and type alone are not unique in the window.</summary>
+        public string AutomationId = string.Empty;
+
+        /// <summary>Click / DoubleClick: what to click, found before every click (null = the fixed point <see cref="At"/>).</summary>
+        public SmartTarget Target;
 
         public bool IsMouse =>
             Kind == StepKind.Click || Kind == StepKind.DoubleClick || Kind == StepKind.Drag ||
@@ -84,6 +141,7 @@ namespace VClicker
         {
             var copy = (MacroStep)MemberwiseClone();
             copy.Window = Window?.Clone();
+            copy.Target = Target?.Clone();
             return copy;
         }
 
@@ -93,6 +151,13 @@ namespace VClicker
             string where = Window == null ? string.Empty
                 : Window.IsMenu ? Loc.T("step.inMenu")
                 : Loc.F("step.inWindow", Clean(Window.Title));
+            if (Target != null && (Kind == StepKind.Click || Kind == StepKind.DoubleClick))
+            {
+                string what = Target.Kind == TargetKind.Element
+                    ? Loc.F("step.targetElement", Lower(Loc.ControlTypeLabel(Target.ControlType)), Clean(Target.Name))
+                    : Loc.F("step.targetImage", At.X, At.Y);
+                return Loc.F(Kind == StepKind.Click ? "step.clickTarget" : "step.doubleTarget", ButtonName(Button), what) + where;
+            }
             switch (Kind)
             {
                 case StepKind.Click: return Loc.F("step.click", ButtonName(Button), At.X, At.Y) + where;
@@ -123,6 +188,9 @@ namespace VClicker
 
         internal static string Seconds(int ms) =>
             (ms / 1000.0).ToString(ms % 1000 == 0 ? "0" : ms % 100 == 0 ? "0.0" : "0.00", CultureInfo.CurrentCulture);
+
+        internal static string Lower(string text) =>
+            text.Length == 0 ? text : char.ToLower(text[0], CultureInfo.CurrentCulture) + text.Substring(1);
 
         private static string ButtonName(ClickButton button) =>
             Loc.T(button == ClickButton.Right ? "step.right" : button == ClickButton.Middle ? "step.middle" : "step.left");
@@ -385,10 +453,11 @@ namespace VClicker
         {
             string window = step.Window == null ? string.Empty
                 : " in " + Quote(step.Window.Class) + " " + Quote(step.Window.Title);
+            string find = step.Target == null ? string.Empty : " " + Find(step.Target);
             switch (step.Kind)
             {
-                case StepKind.Click: return "click " + Btn(step.Button) + " " + Pt(step.At) + window;
-                case StepKind.DoubleClick: return "double " + Btn(step.Button) + " " + Pt(step.At) + window;
+                case StepKind.Click: return "click " + Btn(step.Button) + " " + Pt(step.At) + find + window;
+                case StepKind.DoubleClick: return "double " + Btn(step.Button) + " " + Pt(step.At) + find + window;
                 case StepKind.Drag: return "drag " + Btn(step.Button) + " " + Pt(step.At) + " " + Pt(step.To) + window;
                 case StepKind.Hover: return "hover " + Pt(step.At) + window;
                 case StepKind.Scroll: return "scroll " + step.Notches.ToString(Inv) + " " + Pt(step.At) + window;
@@ -404,7 +473,9 @@ namespace VClicker
                     string target;
                     switch (step.Condition)
                     {
-                        case ConditionKind.Element: target = "element " + Pt(step.At) + " " + Quote(step.ControlType) + " " + Quote(step.Text); break;
+                        case ConditionKind.Element:
+                            target = "element " + Pt(step.At) + " " + Quote(step.ControlType) + " " + Quote(step.Text) + Id(step.AutomationId);
+                            break;
                         case ConditionKind.Color: target = "color " + Pt(step.At) + " " + step.Rgb.ToString("X6", Inv); break;
                         default: target = "window " + Quote(step.Window?.Class) + " " + Quote(step.Window?.Title); break;
                     }
@@ -414,6 +485,60 @@ namespace VClicker
                            (step.Condition != ConditionKind.Window ? window : string.Empty);
                 default: return step.Raw;
             }
+        }
+
+        private static string Find(SmartTarget target) =>
+            "find " + (target.Kind == TargetKind.Element
+                ? "element " + Quote(target.ControlType) + " " + Quote(target.Name) + Id(target.AutomationId)
+                : "image " + Convert.ToBase64String(target.Png)) + " timeout=" + target.TimeoutMs.ToString(Inv);
+
+        private static string Id(string id) => string.IsNullOrEmpty(id) ? string.Empty : " id " + Quote(id);
+
+        /// <summary>"find element "T" "N" [id "I"] timeout=N" or "find image BASE64 timeout=N", from t[i].</summary>
+        private static bool ParseFind(List<string> t, ref int i, out SmartTarget target)
+        {
+            target = null;
+            if (i + 1 >= t.Count || t[i] != "find") return false;
+            var found = new SmartTarget();
+            i++;
+            switch (t[i++])
+            {
+                case "element":
+                    if (i + 1 >= t.Count || t[i].Length == 0 || t[i + 1].Length == 0) return false;
+                    found.Kind = TargetKind.Element;
+                    found.ControlType = t[i];
+                    found.Name = t[i + 1];
+                    i += 2;
+                    if (!ParseId(t, ref i, out found.AutomationId)) return false;
+                    break;
+                case "image":
+                    if (i >= t.Count) return false;
+                    found.Kind = TargetKind.Image;
+                    try { found.Png = Convert.FromBase64String(t[i++]); }
+                    catch (FormatException) { return false; }
+                    using (Bitmap image = found.Decode())
+                        if (image == null) return false; // not a square PNG of a size the matcher uses
+                    break;
+                default:
+                    return false;
+            }
+            if (i >= t.Count || !t[i].StartsWith("timeout=", StringComparison.Ordinal) ||
+                !int.TryParse(t[i].Substring(8), NumberStyles.Integer, Inv, out int timeout)) return false;
+            found.TimeoutMs = Clamp(timeout, MacroStep.MinTimeoutMs, MacroStep.MaxTimeoutMs);
+            i++;
+            target = found;
+            return true;
+        }
+
+        /// <summary>An optional "id "I"" (a non-empty id) at t[i].</summary>
+        private static bool ParseId(List<string> t, ref int i, out string id)
+        {
+            id = string.Empty;
+            if (i >= t.Count || t[i] != "id") return true;
+            if (i + 1 >= t.Count || t[i + 1].Length == 0) return false;
+            id = t[i + 1];
+            i += 2;
+            return true;
         }
 
         private static MacroStep ParseStep(string line)
@@ -431,6 +556,7 @@ namespace VClicker
                     step.Kind = t[0] == "click" ? StepKind.Click : t[0] == "double" ? StepKind.DoubleClick : StepKind.Drag;
                     if (!ParseButton(t, ref i, out step.Button) || !ParsePoint(t, ref i, out step.At)) return unknown;
                     if (step.Kind == StepKind.Drag && !ParsePoint(t, ref i, out step.To)) return unknown;
+                    if (step.Kind != StepKind.Drag && i < t.Count && t[i] == "find" && !ParseFind(t, ref i, out step.Target)) return unknown;
                     break;
                 case "hover":
                     step.Kind = StepKind.Hover;
@@ -496,6 +622,7 @@ namespace VClicker
                     step.ControlType = t[i];
                     step.Text = t[i + 1];
                     i += 2;
+                    if (!ParseId(t, ref i, out step.AutomationId)) return false;
                     break;
                 case "color":
                     step.Condition = ConditionKind.Color;

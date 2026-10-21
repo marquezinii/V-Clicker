@@ -8,7 +8,7 @@ using static VClicker.Tests.Program;
 
 namespace VClicker.Tests
 {
-    internal static class MacroTests
+    internal static partial class MacroTests
     {
         public static void Run()
         {
@@ -18,6 +18,7 @@ namespace VClicker.Tests
             PlayerTests();
             StudioTests();
             ConditionTests();
+            SmartTargetTests();
         }
 
         // ------------------------------------------------------------------ wait until (Conditional Click)

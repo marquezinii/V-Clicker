@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Smart Target** (macro clicks that find what to click): a recorded click can carry a target, recognized at F7 by
+  name (UI Automation control type and name, plus the automation id only when needed to tell two apart) or by
+  appearance (a 32/64/96 px region: the smallest one that is unique and clearly distinct on the screen). Before every
+  click the target is searched in the step's window; the click happens only after two finds at the same place and a
+  final check that the target itself is under the point. Ambiguous, disabled, off-screen, covered or not found within
+  the time limit (10 s by default, 1–3600 s): stopped without clicking, with the reason. The recorded point is never
+  used as a fallback; "back to the fixed point" restores the click exactly. UI Automation and screen reads run off
+  the UI and player threads, one at a time; F8 never waits for them. The on-screen indicator is left out of screenshots.
+- **Conditional Click** now waits for an element wherever it is in the window (same search as Smart Target), and only
+  when it is unique there.
 - **Conditional Click** ("wait until…" macro steps): wait until a UI element is available (UI Automation; the
   interactive control is found from its text), until a point shows a colour, or until a dialog opens, with a time limit
   (30 s by default, 1–3600 s). Moves on after two consecutive positive reads; stops before the next step on timeout,
