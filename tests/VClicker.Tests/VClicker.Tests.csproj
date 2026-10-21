@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>V-Clicker.Tests</AssemblyName>
+    <RootNamespace>VClicker.Tests</RootNamespace>
+    <ApplicationManifest>..\..\src\app.manifest</ApplicationManifest>
+    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\VClicker.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,1 +1,16 @@
+# Build output
 bin/
+obj/
+dist/
+TestResults/
+
+# IDE / OS
+.vs/
+.idea/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
+
+# Portable settings written next to the .exe while testing
+V-Clicker.ini
