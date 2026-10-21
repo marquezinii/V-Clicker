@@ -84,15 +84,19 @@ namespace VClicker
             {
                 if (File.Exists(path)) settings.Apply(ReadPairs(File.ReadAllLines(path)));
             }
-            catch (IOException) { settings = new ClickSettings(); }
-            catch (UnauthorizedAccessException) { settings = new ClickSettings(); }
+            catch (IOException) { settings = new ClickSettings { readFailed = true }; }
+            catch (UnauthorizedAccessException) { settings = new ClickSettings { readFailed = true }; }
             settings.Validate();
             return settings;
         }
 
+        // The file exists but could not be read (locked by an antivirus, say): do not overwrite it with defaults.
+        private bool readFailed;
+
         /// <returns>false if the file could not be written (read-only folder, disk full...).</returns>
         public bool Save(string path)
         {
+            if (readFailed) return false;
             try
             {
                 Validate();
@@ -110,15 +114,15 @@ namespace VClicker
         internal IEnumerable<string> Serialize()
         {
             yield return "; V-Clicker settings - safe to edit while the app is closed.";
-            yield return "IntervalMs=" + IntervalMs;
-            yield return "JitterPercent=" + JitterPercent;
+            yield return "IntervalMs=" + Number(IntervalMs);
+            yield return "JitterPercent=" + Number(JitterPercent);
             yield return "Button=" + Button;
             yield return "DoubleClick=" + DoubleClick;
-            yield return "RepeatCount=" + RepeatCount;
+            yield return "RepeatCount=" + Number(RepeatCount);
             yield return "UseFixedPosition=" + UseFixedPosition;
-            yield return "X=" + X;
-            yield return "Y=" + Y;
-            yield return "StartDelaySeconds=" + StartDelaySeconds;
+            yield return "X=" + Number(X);
+            yield return "Y=" + Number(Y);
+            yield return "StartDelaySeconds=" + Number(StartDelaySeconds);
             yield return "HoldMode=" + HoldMode;
             yield return "ToggleKey=" + ToggleKey;
             yield return "StopKey=" + StopKey;
@@ -128,6 +132,9 @@ namespace VClicker
             yield return "MinimizeToTray=" + MinimizeToTray;
             yield return "Language=" + Language;
         }
+
+        // Always invariant: some cultures write a Unicode minus sign that the invariant parser rejects.
+        private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
 
         internal static Dictionary<string, string> ReadPairs(IEnumerable<string> lines)
         {

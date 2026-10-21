@@ -104,6 +104,7 @@ namespace VClicker
             ["msg.hkInvalid"] = new[] { "Use uma tecla F, de navegação ou combine com Ctrl/Alt.", "Use an F key, a navigation key, or combine with Ctrl/Alt." },
             ["msg.hkUnavailable"] = new[] { "O atalho {0} está indisponível (outro app o usa). Troque-o em \"Atalhos\".", "The {0} shortcut is unavailable (another app uses it). Change it under \"Hotkeys\"." },
             ["msg.blocked"] = new[] { "O Windows recusou o clique e o V-Clicker parou (tela bloqueada ou aviso de permissão aberto?).", "Windows refused the click and V-Clicker stopped (locked screen or a permission prompt open?)." },
+            ["msg.saveFailed"] = new[] { "Não foi possível salvar as configurações (pasta somente leitura?).", "Could not save the settings (read-only folder?)." },
             ["msg.captured"] = new[] { "Posição capturada: X {0}, Y {1}", "Position captured: X {0}, Y {1}" },
             ["msg.done"] = new[] { "Concluído: {0} cliques.", "Finished: {0} clicks." },
             ["msg.adminFailed"] = new[] { "Não foi possível reiniciar como administrador.", "Could not restart as administrator." },

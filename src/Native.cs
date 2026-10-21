@@ -87,6 +87,37 @@ namespace VClicker
         [DllImport("user32.dll", SetLastError = true)]
         internal static extern bool UnregisterHotKey(IntPtr window, int id);
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct PROCESS_POWER_THROTTLING_STATE
+        {
+            public uint Version, ControlMask, StateMask;
+        }
+
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetCurrentProcess();
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetProcessInformation(IntPtr process, int informationClass,
+            ref PROCESS_POWER_THROTTLING_STATE information, uint size);
+
+        /// <summary>
+        /// Windows 11 may throttle a process whose windows are minimized or hidden (EcoQoS) and then ignores
+        /// timeBeginPeriod, which would make a minimized click loop run several times slower than configured.
+        /// Opts this process out; best-effort, older Windows versions simply reject the flags.
+        /// </summary>
+        internal static void DisablePowerThrottling()
+        {
+            const uint ExecutionSpeed = 0x1, IgnoreTimerResolution = 0x4;
+            var state = new PROCESS_POWER_THROTTLING_STATE
+            {
+                Version = 1,
+                ControlMask = ExecutionSpeed | IgnoreTimerResolution,
+                StateMask = 0 // controlled bit set + state bit clear = throttling off
+            };
+            SetProcessInformation(GetCurrentProcess(), 4 /* ProcessPowerThrottling */, ref state,
+                (uint)Marshal.SizeOf(typeof(PROCESS_POWER_THROTTLING_STATE)));
+        }
+
         [DllImport("kernel32.dll")]
         internal static extern bool Beep(uint frequency, uint durationMs);
 

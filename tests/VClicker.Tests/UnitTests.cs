@@ -49,6 +49,13 @@ namespace VClicker.Tests
                 True(new Hotkey(Keys.A, ctrl: true).IsAcceptable, "Ctrl+A");
             });
 
+            Test("hotkey: rejects enum names that are not real keys (hand-edited .ini)", () =>
+            {
+                foreach (string bad in new[] { "Ctrl+Control", "Alt+Shift", "KeyCode", "Ctrl+Modifiers", "Ctrl+Alt+Alt" })
+                    True(!Hotkey.TryParse(bad, out _), "should reject '" + bad + "'");
+                True(!new Hotkey((Keys)0x20000, ctrl: true).IsAcceptable, "key value above the virtual-key range");
+            });
+
             Test("hotkey: FromKeyData splits key and modifiers", () =>
             {
                 Hotkey hotkey = Hotkey.FromKeyData(Keys.F6 | Keys.Control | Keys.Alt);
@@ -154,6 +161,36 @@ namespace VClicker.Tests
                     Equal(string.Join("|", saved.Serialize()), string.Join("|", loaded.Serialize()), "round trip");
                     Equal(-120, loaded.X, "negative coordinate");
                     Equal(new Hotkey(Keys.F10, ctrl: true), loaded.ToggleKey, "hotkey with modifier");
+                }
+                finally { File.Delete(path); File.Delete(path + ".tmp"); }
+            });
+
+            Test("settings: negative numbers survive cultures with a Unicode minus sign", () =>
+            {
+                var original = Thread.CurrentThread.CurrentCulture;
+                string path = TempFile();
+                try
+                {
+                    Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("sv-SE");
+                    True(new ClickSettings { X = -120, Y = -7 }.Save(path), "save");
+                    Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+                    ClickSettings loaded = ClickSettings.Load(path);
+                    Equal(-120, loaded.X, "x"); Equal(-7, loaded.Y, "y");
+                }
+                finally { Thread.CurrentThread.CurrentCulture = original; File.Delete(path); File.Delete(path + ".tmp"); }
+            });
+
+            Test("settings: an existing file that cannot be read is never overwritten with defaults", () =>
+            {
+                string path = TempFile();
+                try
+                {
+                    new ClickSettings { IntervalMs = 77 }.Save(path);
+                    ClickSettings loaded;
+                    using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None)) // locked, like an antivirus scan
+                        loaded = ClickSettings.Load(path);
+                    True(!loaded.Save(path), "Save must refuse while the original could not be read");
+                    Equal(77, ClickSettings.Load(path).IntervalMs, "the user's file is untouched");
                 }
                 finally { File.Delete(path); File.Delete(path + ".tmp"); }
             });
@@ -265,6 +302,18 @@ namespace VClicker.Tests
                     Equal(5, sink.Count, "sink clicks"); Equal(5L, engine.Clicks, "engine counter");
                     Equal(EnginePhase.Idle, engine.Phase, "phase");
                 }
+            });
+
+            Test("buttons: UI segment order matches the enum and each button maps to its own Win32 flags", () =>
+            {
+                // MainForm casts the Segmented index (Left, Middle, Right) straight to ClickButton.
+                Equal(0, (int)ClickButton.Left, "Left"); Equal(1, (int)ClickButton.Middle, "Middle"); Equal(2, (int)ClickButton.Right, "Right");
+                SendInputSink.Flags(ClickButton.Left, out uint down, out uint up);
+                Equal(Native.MOUSEEVENTF_LEFTDOWN, down, "left down"); Equal(Native.MOUSEEVENTF_LEFTUP, up, "left up");
+                SendInputSink.Flags(ClickButton.Middle, out down, out up);
+                Equal(Native.MOUSEEVENTF_MIDDLEDOWN, down, "middle down"); Equal(Native.MOUSEEVENTF_MIDDLEUP, up, "middle up");
+                SendInputSink.Flags(ClickButton.Right, out down, out up);
+                Equal(Native.MOUSEEVENTF_RIGHTDOWN, down, "right down"); Equal(Native.MOUSEEVENTF_RIGHTUP, up, "right up");
             });
 
             Test("engine: passes button, double-click and fixed position to the sink", () =>
@@ -411,6 +460,21 @@ namespace VClicker.Tests
                     True(engine.WaitForStop(1000), "stop");
                     RunToEnd(engine, new ClickPlan { IntervalMs = 1, MaxClicks = 3 });
                     Equal(3L, engine.Clicks, "counter restarts on each run");
+                }
+            });
+
+            Test("engine: Start() right after Stopped is raised always succeeds (no lost keypress)", () =>
+            {
+                using (var engine = new ClickEngine(new FakeSink()))
+                {
+                    var stopped = new AutoResetEvent(false);
+                    // A slow Stopped handler keeps the worker thread alive for a moment after the phase turned Idle.
+                    engine.Stopped += r => { stopped.Set(); Thread.Sleep(20); };
+                    for (int i = 0; i < 20; i++)
+                    {
+                        True(engine.Start(new ClickPlan { IntervalMs = 1, MaxClicks = 1 }), "Start #" + i + " was refused");
+                        True(stopped.WaitOne(2000), "run #" + i + " never reported Stopped");
+                    }
                 }
             });
 

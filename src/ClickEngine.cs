@@ -6,7 +6,8 @@ using System.Threading;
 
 namespace VClicker
 {
-    internal enum ClickButton { Left, Right, Middle }
+    /// <summary>Declaration order is the order of the UI segments (Segmented index == enum value).</summary>
+    internal enum ClickButton { Left, Middle, Right }
 
     internal enum StopReason
     {
@@ -64,9 +65,9 @@ namespace VClicker
             return false;
         }
 
-        private Native.INPUT[] Build(ClickButton button, bool doubleClick)
+        /// <summary>The SendInput press / release flags of a mouse button.</summary>
+        internal static void Flags(ClickButton button, out uint down, out uint up)
         {
-            uint down, up;
             switch (button)
             {
                 case ClickButton.Right:
@@ -76,6 +77,11 @@ namespace VClicker
                 default:
                     down = Native.MOUSEEVENTF_LEFTDOWN; up = Native.MOUSEEVENTF_LEFTUP; break;
             }
+        }
+
+        private Native.INPUT[] Build(ClickButton button, bool doubleClick)
+        {
+            Flags(button, out uint down, out uint up);
 
             // One cached array per (button, single/double): the click loop allocates nothing.
             int slot = (int)button;
@@ -109,6 +115,11 @@ namespace VClicker
         private long clickingSince;
         private long countdownEnd;
         private long finalElapsedTicks;
+
+        static ClickEngine()
+        {
+            Native.DisablePowerThrottling();
+        }
 
         public ClickEngine(IClickSink sink, Func<int, bool> isKeyDown = null)
         {
@@ -152,7 +163,11 @@ namespace VClicker
         {
             lock (gate)
             {
-                if (worker != null && worker.IsAlive) return false;
+                if (worker != null && worker.IsAlive)
+                {
+                    // A run that just reported Idle may still be returning from its thread; only a live run refuses.
+                    if (Phase != EnginePhase.Idle || !worker.Join(250)) return false;
+                }
                 Interlocked.Exchange(ref clicks, 0);
                 Interlocked.Exchange(ref clickingSince, 0);
                 Interlocked.Exchange(ref finalElapsedTicks, 0);
@@ -274,11 +289,16 @@ namespace VClicker
         public void Dispose()
         {
             Stop();
-            WaitForStop(2000);
+            // If the worker somehow outlives the wait, leave the token source alone rather than
+            // pull it out from under a thread that is still waiting on it.
+            bool finished = WaitForStop(2000);
             lock (gate)
             {
-                cancel?.Dispose();
-                cancel = null;
+                if (finished)
+                {
+                    cancel?.Dispose();
+                    cancel = null;
+                }
             }
         }
     }

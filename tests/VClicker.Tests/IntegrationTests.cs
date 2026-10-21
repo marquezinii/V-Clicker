@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -42,6 +44,25 @@ namespace VClicker.Tests
                     "cursor=" + Cursor.Position + " button=" + area + " overTarget=" + CursorOverTarget(target));
                 Application.DoEvents();
                 Thread.Sleep(5);
+            }
+        }
+
+        private static void Spin(int milliseconds)
+        {
+            Stopwatch watch = Stopwatch.StartNew();
+            while (watch.ElapsedMilliseconds < milliseconds)
+            {
+                Application.DoEvents();
+                Thread.Sleep(5);
+            }
+        }
+
+        private static IEnumerable<T> FindAll<T>(Control root) where T : Control
+        {
+            foreach (Control child in root.Controls)
+            {
+                if (child is T match) yield return match;
+                foreach (T nested in FindAll<T>(child)) yield return nested;
             }
         }
 
@@ -104,13 +125,46 @@ namespace VClicker.Tests
 
                     app.WindowState = FormWindowState.Minimized;
                     SendKeys.SendWait("{F6}");
-                    Pump(1400, target, button);
+                    Pump(1100, target, button); // 1 s start delay
                     True(clicks > stopped, "hotkeys must work while minimized");
+                    // Minimized windows must not slow the loop down (Windows 11 throttles background processes).
+                    int before = clicks;
+                    Pump(1000, target, button);
+                    int rate = clicks - before; // 20 ms interval: ~50 per second
+                    True(rate >= 35, "only " + rate + " clicks in 1 s at 20 ms while minimized (expected ~50)");
                     SendKeys.SendWait("{F6}");
                     Pump(150, target, button);
                     stopped = clicks;
                     Pump(250, target, button);
                     Equal(stopped, clicks, "F6 must toggle clicking off");
+                });
+
+                Test("hotkey capture: the box receives an already-registered key instead of running its action", () =>
+                {
+                    app.WindowState = FormWindowState.Normal;
+                    app.Activate();
+                    Spin(400);
+                    HotkeyBox box = FindAll<HotkeyBox>(app).First(b => b.Value.Equals(new Hotkey(Keys.F6)));
+                    Rectangle area = box.RectangleToScreen(box.ClientRectangle);
+                    Cursor.Position = new Point(area.Left + area.Width / 2, area.Top + area.Height / 2);
+                    Spin(150);
+                    new SendInputSink().Click(ClickButton.Left, false, null); // a real click on the box
+                    Spin(200);
+                    True(box.Capturing, "clicking the box should start listening");
+
+                    SendKeys.SendWait("{F6}");
+                    Spin(300);
+                    Equal(EnginePhase.Idle, app.Engine.Phase, "F6 must not start the clicker while the box is listening");
+                    True(!box.Capturing, "the box stops listening after a key");
+                    Equal(new Hotkey(Keys.F6), box.Value, "the key was captured");
+
+                    // The global hotkeys are live again afterwards (stopped inside the start delay: no click is sent).
+                    SendKeys.SendWait("{F6}");
+                    Spin(200);
+                    Equal(EnginePhase.Countdown, app.Engine.Phase, "F6 works again after capturing");
+                    SendKeys.SendWait("{F8}");
+                    Spin(200);
+                    Equal(EnginePhase.Idle, app.Engine.Phase, "F8 works again after capturing");
                 });
 
                 Test("hotkeys are released when the window closes", () =>

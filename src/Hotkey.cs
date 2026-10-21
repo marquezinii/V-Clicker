@@ -30,7 +30,7 @@ namespace VClicker
         /// else, like a letter, needs Ctrl or Alt so it cannot hijack normal typing.
         /// </summary>
         public bool IsAcceptable =>
-            !IsEmpty && Key >= Keys.Back && !IsModifierKey(Key) && (IsStandalone(Key) || Ctrl || Alt);
+            !IsEmpty && Key >= Keys.Back && Key <= Keys.OemClear && !IsModifierKey(Key) && (IsStandalone(Key) || Ctrl || Alt);
 
         public static Hotkey FromKeyData(Keys keyData) => new Hotkey(
             keyData & Keys.KeyCode,

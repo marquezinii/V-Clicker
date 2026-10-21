@@ -446,6 +446,14 @@ namespace VClicker
 
         public event EventHandler ValueChanged;
 
+        /// <summary>
+        /// Raised when the box starts or stops listening for a key. The owner must release the global
+        /// hotkeys while it listens: a registered hotkey is swallowed by Windows before the box sees it.
+        /// </summary>
+        public event EventHandler CapturingChanged;
+
+        public bool Capturing => capturing;
+
         /// <summary>Called with the captured combination; return false to reject it.</summary>
         public Func<Hotkey, bool> Accept { get; set; }
 
@@ -471,18 +479,24 @@ namespace VClicker
             set { this.value = value; Invalidate(); }
         }
 
+        private void SetCapturing(bool on)
+        {
+            if (capturing == on) return;
+            capturing = on;
+            Invalidate();
+            CapturingChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         protected override void OnMouseDown(MouseEventArgs e)
         {
             Focus();
-            capturing = true;
-            Invalidate();
+            SetCapturing(true);
             base.OnMouseDown(e);
         }
 
         protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
-        protected override void OnLostFocus(EventArgs e) { capturing = false; Invalidate(); base.OnLostFocus(e); }
-        protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
-
+        protected override void OnLostFocus(EventArgs e) { SetCapturing(false); base.OnLostFocus(e); }
+        protected override void OnEnabledChanged(EventArgs e) { if (!Enabled) SetCapturing(false); Invalidate(); base.OnEnabledChanged(e); }
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
             if (!Focused) return base.ProcessCmdKey(ref msg, keyData);
@@ -491,8 +505,7 @@ namespace VClicker
             {
                 if (keyData == Keys.Enter || keyData == Keys.Space)
                 {
-                    capturing = true;
-                    Invalidate();
+                    SetCapturing(true);
                     return true;
                 }
                 return base.ProcessCmdKey(ref msg, keyData);
@@ -500,21 +513,20 @@ namespace VClicker
 
             if (keyData == Keys.Escape)
             {
-                capturing = false;
-                Invalidate();
+                SetCapturing(false);
                 return true;
             }
 
             Hotkey captured = Hotkey.FromKeyData(keyData);
             if (Hotkey.IsModifierKey(captured.Key)) return true; // still building the combination
 
-            capturing = false;
+            // Accept() runs while still capturing, i.e. while the owner has the global hotkeys released.
             if (Accept == null || Accept(captured))
             {
                 value = captured;
                 ValueChanged?.Invoke(this, EventArgs.Empty);
             }
-            Invalidate();
+            SetCapturing(false);
             return true;
         }
 
@@ -549,6 +561,13 @@ namespace VClicker
             {
                 widths[i] = TextRenderer.MeasureText(parts[i], Font).Width + 2 * padX;
                 total += widths[i] + (i > 0 ? gap : 0);
+            }
+            if (total > Width - 2 * gap)
+            {
+                // Too long for keycaps (e.g. Ctrl+Alt+OemQuestion): fall back to plain text.
+                TextRenderer.DrawText(g, value.ToString(), Font, new Rectangle(Point.Empty, Size),
+                    Enabled ? Theme.Text : Theme.Dim, Theme.Centered);
+                return;
             }
             int x = (Width - total) / 2, y = (Height - capHeight) / 2;
             for (int i = 0; i < parts.Length; i++)

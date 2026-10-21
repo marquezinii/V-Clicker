@@ -41,7 +41,7 @@ namespace VClicker
         private DarkCheck chkTop, chkTray, chkSounds;
         private LinkLabel adminLink;
 
-        private bool loading;
+        private bool loading, saveWarned;
         private StopReason? lastStop;
         private double cps;
         private long lastSampleStamp, lastSampleClicks, noticeExpires;
@@ -223,6 +223,13 @@ namespace VClicker
         {
             var box = new HotkeyBox { Dock = DockStyle.Fill, Margin = RowGap };
             box.Accept = hotkey => AcceptHotkey(box, id, hotkey);
+            box.CapturingChanged += delegate
+            {
+                if (hotkeys == null) return;
+                // While listening, F6/F7/F8 must reach the box instead of firing their actions.
+                if (box.Capturing) hotkeys.UnregisterAll();
+                else RegisterAllHotkeys();
+            };
             Localize(() => box.PromptText = Loc.T("hk.press"));
             lockable.Add(box);
             return box;
@@ -259,7 +266,8 @@ namespace VClicker
         {
             Image logo;
             using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("icon-256.png"))
-                logo = new Bitmap(stream);
+            using (var decoded = new Bitmap(stream))
+                logo = new Bitmap(decoded); // GDI+ needs the source stream open for the life of a stream-backed Bitmap
             Disposed += delegate { logo.Dispose(); };
 
             var header = Table("auto", "100%", "auto");
@@ -541,9 +549,9 @@ namespace VClicker
             hkToggle.AccessibleName = "Start or stop hotkey";
             hkStop.AccessibleName = "Stop hotkey";
             hkCapture.AccessibleName = "Capture position hotkey";
-            hkToggle.ValueChanged += OnConfigChanged;
-            hkStop.ValueChanged += OnConfigChanged;
-            hkCapture.ValueChanged += OnConfigChanged;
+            hkToggle.ValueChanged += OnHotkeyChanged;
+            hkStop.ValueChanged += OnHotkeyChanged;
+            hkCapture.ValueChanged += OnHotkeyChanged;
             Row(body, RowLabel("hk.toggle"), hkToggle);
             Row(body, RowLabel("hk.stop"), hkStop);
             Row(body, RowLabel("hk.capture"), hkCapture);
@@ -686,11 +694,18 @@ namespace VClicker
             settings.Sounds = chkSounds.Checked;
         }
 
+        private void SaveSettings()
+        {
+            if (settings.Save(settingsPath) || saveWarned) return;
+            saveWarned = true;
+            ShowNotice(Loc.T("msg.saveFailed"), Theme.Warning, 8);
+        }
+
         private void OnConfigChanged(object sender, EventArgs e)
         {
             if (loading) return;
             ReadUi();
-            settings.Save(settingsPath);
+            SaveSettings();
             UpdateRateLabel();
             UpdateEnabledState();
             ApplyWindowOptions();
@@ -738,8 +753,8 @@ namespace VClicker
 
         private void ApplyWindowOptions()
         {
-            TopMost = settings.AlwaysOnTop;
-            tray.Visible = settings.MinimizeToTray;
+            if (TopMost != settings.AlwaysOnTop) TopMost = settings.AlwaysOnTop;
+            if (tray.Visible != settings.MinimizeToTray) tray.Visible = settings.MinimizeToTray;
         }
 
         private void ApplyLanguage()
@@ -773,7 +788,7 @@ namespace VClicker
         {
             settings.Language = segLanguage.SelectedIndex == 0 ? "pt" : "en";
             Loc.SetLanguage(settings.Language);
-            settings.Save(settingsPath);
+            SaveSettings();
             ApplyLanguage();
         }
 
@@ -789,7 +804,7 @@ namespace VClicker
         {
             if (engine.Phase != EnginePhase.Idle) return;
             ReadUi();
-            settings.Save(settingsPath);
+            SaveSettings();
 
             ClickPlan plan = settings.ToPlan();
             if (settings.HoldMode && fromHotkey)
@@ -896,15 +911,19 @@ namespace VClicker
                     return false;
                 }
             }
-            Hotkey previous = box.Value;
+            // Test-register only; the box re-registers everything from its values when it stops listening.
             if (hotkeys != null && !hotkeys.Register(id, hotkey))
             {
-                hotkeys.Register(id, previous);
                 ShowNotice(Loc.F("msg.hkTaken", hotkey), Theme.Warning, 6);
                 return false;
             }
-            ShowHint();
             return true;
+        }
+
+        private void OnHotkeyChanged(object sender, EventArgs e)
+        {
+            OnConfigChanged(sender, e);
+            ShowHint();
         }
 
         private void RegisterAllHotkeys()
@@ -1103,9 +1122,17 @@ namespace VClicker
             Close();
         }
 
-        private static void OpenUrl(string url)
+        private void OpenUrl(string url)
         {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Win32Exception)
+            {
+                // No default browser registered: show the address so it can be copied.
+                ShowNotice(url, Theme.Warning, 10);
+            }
         }
     }
 
