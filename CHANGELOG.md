@@ -6,8 +6,20 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Changed
-- New official brand: app icon (window, taskbar, tray, `.exe`), README logo (light and dark), social preview, and the
-  brand kit in `assets/brand`.
+- **New interface, "custom keyboard"**: every window redrawn as a custom mechanical keyboard on a graphite plate.
+  Actions are keycaps (the amber Start key with its hotkey printed on it, a coral Stop key while clicking, the
+  5/10/15/20/50 CPS number row), choices are clusters of keys where the chosen one is held down, on/off options are
+  lock keys with an LED, typed values sit in recessed wells, and live numbers (requested CPS, clicks, CPS sent, time,
+  messages) are on a black display. Groups are labelled like a printed plate instead of boxed in cards. Legends use
+  Bahnschrift (ships with Windows); step and indicator-corner icons are drawn, not font glyphs. The main window is
+  reorganized (display, Start, speed and hotkeys on the left; click, position, Window Lock and options on the right);
+  the Macro Studio, its dialogs, the app picker, the tray menu and the on-screen indicator follow the same look.
+  No function, setting, hotkey or file format changed.
+- The footer credits the maker: "Made by Vemryx" (links to vemryx.com), next to GitHub and the version; the `.exe`
+  carries Vemryx as its company.
+- New official brand, butter-yellow paper collage: the graphite V on a cream card is the app icon (window, taskbar,
+  tray, `.exe`, header), plus a new README logo, social preview and the brand kit in `assets/brand` (logos, emblem,
+  monogram and brand art). The previous cyan/violet brand files were removed.
 
 ### Added
 - **Smart Target** (macro clicks that find what to click): a recorded click can carry a target, recognized at F7 by

@@ -36,9 +36,9 @@ namespace VClicker
             StartPosition = FormStartPosition.Manual;
             TopMost = true;
             AutoScaleMode = AutoScaleMode.None;
-            BackColor = Theme.Surface;
+            BackColor = Theme.Glass;
             ForeColor = Theme.Text;
-            Font = Theme.Ui(10f, true);
+            Font = Theme.Legend(10f, bold: true);
             Opacity = 0.92;
             DoubleBuffered = true;
             Text = "V-Clicker HUD";
@@ -116,14 +116,11 @@ namespace VClicker
         {
             Graphics g = e.Graphics;
             Theme.Smooth(g);
-            g.Clear(Theme.Surface);
-            float d = Theme.Dp(9);
-            using (var brush = new SolidBrush(dot))
-                g.FillEllipse(brush, Theme.Dp(14), (Height - d) / 2, d, d);
+            // A sliver of the display glass over the game: the status lamp and the same words as the main window.
+            g.Clear(Theme.Glass);
+            Theme.DrawLed(g, new PointF(Theme.Dp(18), Height / 2f), Theme.Dp(9), dot, dot != Theme.Dim);
             var area = new Rectangle(Theme.Dp(30), 0, Width - Theme.Dp(40), Height);
-            TextRenderer.DrawText(g, Text, Font, area, Theme.Text,
-                TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix |
-                TextFormatFlags.EndEllipsis);
+            TextRenderer.DrawText(g, Text, Font, area, Theme.Text, Theme.LeftMiddle);
         }
     }
 }

@@ -1,9 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/logo-horizontal-color.png">
-  <img src="assets/brand/logo-horizontal-navy.png" width="440" alt="V-Clicker">
-</picture>
+<img src="assets/brand/logo-horizontal.png" width="440" alt="V-Clicker">
 
 # V-Clicker
 
@@ -94,10 +91,10 @@ src/             the app (WinForms, .NET Framework 4.8, no third-party dependenc
   Hud.cs           on-screen indicator (separate window, click-through, never takes focus)
   Hotkey.cs        global hotkeys (RegisterHotKey) and validation
   Settings.cs      .ini settings with validation and a safe fallback
-  MainForm.cs      main window;  Controls.cs / Theme.cs  dark controls and theme
+  MainForm.cs      main window;  Controls.cs / Theme.cs / Icons.cs  keys, LEDs, display and drawn icons (DESIGN.md)
   Loc.cs           Portuguese and English strings
 tests/           dependency-free test runner (99 unit tests + 8 integration tests)
-assets/          app icon and brand identity (assets/brand: logos, mark and wordmarks)
+assets/          app icon and brand identity (assets/brand: icon, logos and brand art)
 docs/            screenshots
 ```
 

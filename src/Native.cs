@@ -137,6 +137,10 @@ namespace VClicker
         /// Dark title bar on Windows 10/11, plus exact caption/text/border colors on Windows 11.
         /// Every call is best-effort: older builds simply ignore the attributes they do not know.
         /// </summary>
+        /// <summary>"DarkMode_Explorer" gives a window dark scroll bars (Windows 10 1809+; elsewhere it changes nothing).</summary>
+        [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+        internal static extern int SetWindowTheme(IntPtr window, string app, string idList);
+
         internal static void StyleTitleBar(IntPtr window, int caption, int text, int border)
         {
             int on = 1;

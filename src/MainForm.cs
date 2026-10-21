@@ -16,8 +16,10 @@ namespace VClicker
     {
         private const int IdToggle = 1, IdStop = 2, IdCapture = 3;
         private const string RepoUrl = "https://github.com/marquezinii/V-Clicker";
-        private const string LabelColumn = "150";
-        private static readonly Padding RowGap = Theme.Pad(0, 0, 0, 8);
+        private const string MakerName = "Vemryx", MakerUrl = "https://vemryx.com";
+        private const string LeftLabels = "150", RightLabels = "116";
+        private const int RowHeight = 32; // clusters and fields in the settings rows
+        private static readonly Padding RowGap = Theme.Pad(0, 0, 0, 6);
 
         private readonly string settingsPath;
         private readonly ClickSettings settings;
@@ -33,19 +35,19 @@ namespace VClicker
         private NotifyIcon tray;
         private ToolStripMenuItem trayShow, trayToggle, trayExit;
 
-        private Badge badge;
-        private Label clicksValue, requestedValue, sentValue, timeValue, notice, rateLabel;
-        private FlatButton startButton, captureButton;
+        private StatusDisplay display;
+        private Label rateLabel;
+        private KeyButton startButton, captureButton;
         private NumberField fCps, fHours, fMinutes, fSeconds, fMillis, fJitter, fRepeat, fX, fY, fDelay;
         private Segmented segLanguage, segSpeed, segButton, segType, segRepeat, segPosition, segMode;
         private Control cpsRow, intervalRow;
         private HotkeyBox hkToggle, hkStop, hkCapture;
-        private DarkCheck chkTop, chkTray, chkSounds, chkLock, chkHud;
+        private LedCheck chkTop, chkTray, chkSounds, chkLock, chkHud;
         private Segmented segLockMode, segHudCorner;
         private Label lockAppLabel;
-        private FlatButton lockChoose;
+        private KeyButton lockChoose;
         private LinkLabel adminLink;
-        private FlatButton studioButton;
+        private KeyButton studioButton;
         private MacroStudio studio;
 
         // Window Lock: the exact window this run is bound to (Zero = no lock).
@@ -84,7 +86,7 @@ namespace VClicker
             AutoScaleMode = AutoScaleMode.None; // pixel metrics are scaled by Theme.Dp() instead
             AutoSize = true;
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            Padding = Theme.Pad(20);
+            Padding = Theme.Pad(16);
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
             Font = Theme.Ui(9.5f);
@@ -129,7 +131,7 @@ namespace VClicker
                 Dock = DockStyle.Fill,
                 ColumnCount = columns.Length,
                 Margin = Padding.Empty,
-                BackColor = Theme.Surface // inside cards; the few tables on the window background override this
+                BackColor = Theme.Bg
             };
             foreach (string column in columns)
             {
@@ -158,35 +160,20 @@ namespace VClicker
             table.SetColumnSpan(cell, table.ColumnCount);
         }
 
-        private static Card NewCard(Grid body)
-        {
-            var card = new Card
-            {
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                Dock = DockStyle.Fill,
-                Margin = Theme.Pad(0, 0, 0, 10),
-                Padding = Theme.Pad(16, 12, 16, 4)
-            };
-            body.BackColor = Theme.Surface;
-            card.Controls.Add(body);
-            return card;
-        }
-
         private void Localize(Action apply)
         {
             localizers.Add(apply);
             apply();
         }
 
-        private Label Lbl(string key, float size = 9.5f, bool dim = false, bool semibold = false)
+        private Label Lbl(string key, float size = 9.75f, bool dim = false)
         {
             var label = new Label
             {
                 AutoSize = true,
-                Font = Theme.Ui(size, semibold),
+                Font = Theme.Legend(size),
                 ForeColor = dim ? Theme.Dim : Theme.Text,
-                BackColor = Theme.Surface,
+                BackColor = Theme.Bg,
                 Anchor = AnchorStyles.Left,
                 Margin = Theme.Pad(0, 0, 8, 8),
                 UseMnemonic = false
@@ -206,16 +193,17 @@ namespace VClicker
             return label;
         }
 
-        private Label Title(string key)
+        /// <summary>The silkscreen label that opens a group of keys.</summary>
+        private Section Heading(string key)
         {
-            Label label = Lbl(key, 8.5f, dim: true, semibold: true);
-            label.Margin = Theme.Pad(0, 0, 0, 8);
-            return label;
+            var section = new Section { Dock = DockStyle.Fill, Margin = Theme.Pad(0, 0, 0, 4) };
+            Localize(() => section.Text = Loc.T(key));
+            return section;
         }
 
         private Segmented Seg(params string[] keys)
         {
-            var segmented = new Segmented { Dock = DockStyle.Fill, Margin = RowGap };
+            var segmented = new Segmented { Dock = DockStyle.Fill, Height = Theme.Dp(RowHeight), Margin = RowGap };
             Localize(() =>
             {
                 var items = new string[keys.Length];
@@ -234,7 +222,8 @@ namespace VClicker
                 Unit = unit,
                 FieldName = accessibleName,
                 Dock = DockStyle.Fill,
-                Margin = RowGap
+                Margin = RowGap,
+                Height = Theme.Dp(RowHeight)
             };
             field.Number = min;
             numberFields.Add(field);
@@ -258,6 +247,10 @@ namespace VClicker
             return box;
         }
 
+        /// <summary>
+        /// Header across the top; below it the instrument on the left (display, Start key, speed, hotkeys) and the
+        /// settings clusters on the right; the footer across the bottom.
+        /// </summary>
         private void BuildLayout()
         {
             var root = new Grid
@@ -265,14 +258,13 @@ namespace VClicker
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 ColumnCount = 2,
-                RowCount = 2,
+                RowCount = 3,
                 Margin = Padding.Empty,
                 BackColor = Theme.Bg
             };
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Theme.Dp(400)));
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Theme.Dp(356)));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Theme.Dp(372)));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Theme.Dp(380)));
+            for (int i = 0; i < 3; i++) root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             Control header = BuildHeader();
             header.TabIndex = 10; // the settings come first in the tab order; the Macro Studio button after them
@@ -280,9 +272,14 @@ namespace VClicker
             root.SetColumnSpan(header, 2);
             root.Controls.Add(BuildLeftColumn(), 0, 1);
             Control right = BuildRightColumn();
-            right.Margin = Theme.Pad(16, 0, 0, 0);
+            right.Margin = Theme.Pad(28, 0, 0, 0);
             root.Controls.Add(right, 1, 1);
+            Control footer = BuildFooter();
+            root.Controls.Add(footer, 0, 2);
+            root.SetColumnSpan(footer, 2);
 
+            // Not docked (the form sizes itself to it), so the padding has to be applied by hand on the top-left side.
+            root.Location = new Point(Padding.Left, Padding.Top);
             Controls.Add(root);
         }
 
@@ -295,23 +292,21 @@ namespace VClicker
             Disposed += delegate { logo.Dispose(); };
 
             var header = Table("auto", "100%", "auto", "auto");
-            header.BackColor = Theme.Bg;
-            header.Margin = Theme.Pad(0, 0, 0, 14);
+            header.Margin = Theme.Pad(0, 0, 0, 12);
 
-            var mark = new LogoBox(logo) { Size = Theme.Sz(44, 44), Margin = Theme.Pad(0, 0, 12, 0) };
+            var mark = new LogoBox(logo) { Size = Theme.Sz(40, 40), Margin = Theme.Pad(0, 0, 12, 0) };
 
             var titles = Table("100%");
-            titles.BackColor = Theme.Bg;
             titles.Anchor = AnchorStyles.Left;
             titles.Dock = DockStyle.None;
             var title = new Label
             {
-                Text = "V-Clicker", AutoSize = true, Font = Theme.Ui(17f, true), ForeColor = Theme.Text,
+                Text = "V-Clicker", AutoSize = true, Font = Theme.Legend(17f, bold: true), ForeColor = Theme.Text,
                 BackColor = Theme.Bg, Margin = Padding.Empty, UseMnemonic = false
             };
             var subtitle = new Label
             {
-                AutoSize = true, Font = Theme.Ui(9.25f), ForeColor = Theme.Dim, BackColor = Theme.Bg,
+                AutoSize = true, Font = Theme.Ui(9f), ForeColor = Theme.Dim, BackColor = Theme.Bg,
                 Margin = Padding.Empty, UseMnemonic = false
             };
             Localize(() => subtitle.Text = Loc.T("subtitle"));
@@ -320,14 +315,14 @@ namespace VClicker
 
             segLanguage = new Segmented
             {
-                Items = new[] { "PT", "EN" }, Size = Theme.Sz(92, 28), Anchor = AnchorStyles.Right,
+                Items = new[] { "PT", "EN" }, Size = Theme.Sz(96, 34), Anchor = AnchorStyles.Right,
                 Margin = Padding.Empty
             };
             segLanguage.AccessibleName = "Language";
 
-            studioButton = new FlatButton
+            studioButton = new KeyButton
             {
-                Kind = ButtonKind.Secondary, Size = Theme.Sz(124, 28), Anchor = AnchorStyles.Right, Margin = Theme.Pad(0, 0, 10, 0)
+                Kind = ButtonKind.Secondary, Size = Theme.Sz(136, 36), Anchor = AnchorStyles.Right, Margin = Theme.Pad(0, 0, 10, 0)
             };
             Localize(() =>
             {
@@ -343,43 +338,64 @@ namespace VClicker
         private Control BuildLeftColumn()
         {
             Grid column = Table("100%");
-            column.BackColor = Theme.Bg;
-            Row(column, BuildIntervalCard());
-            Row(column, BuildClickCard());
-            Row(column, BuildLockCard());
+
+            display = new StatusDisplay { Dock = DockStyle.Fill, Height = Theme.Dp(164), Margin = Theme.Pad(0, 0, 0, 12) };
+            Localize(() => tips.SetToolTip(display, Loc.T("stat.note.tip")));
+            Row(column, display);
+
+            startButton = new KeyButton
+            {
+                Kind = ButtonKind.Primary, Dock = DockStyle.Fill, Height = Theme.Dp(60), Margin = Theme.Pad(0, 0, 0, 8),
+                Font = Theme.Legend(13f, bold: true)
+            };
+            startButton.Click += delegate { Toggle(false); };
+            Row(column, startButton);
+
+            BuildSpeed(column);
+            BuildHotkeys(column);
             AddFiller(column);
             return column;
         }
 
-        /// <summary>Empty last row that soaks up spare height so the cards above keep their natural size.</summary>
+        private Control BuildRightColumn()
+        {
+            Grid column = Table("100%");
+            BuildClick(column);
+            BuildPosition(column);
+            BuildLock(column);
+            BuildOptions(column);
+            AddFiller(column);
+            return column;
+        }
+
+        /// <summary>Empty last row that soaks up spare height so the rows above keep their natural size.</summary>
         private static void AddFiller(TableLayoutPanel column)
         {
             column.RowCount++;
             column.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         }
 
-        private Control BuildIntervalCard()
+        private void BuildSpeed(TableLayoutPanel column)
         {
-            Grid body = Table("100%");
-            FullRow(body, Title("card.interval"));
+            FullRow(column, Heading("card.interval"));
 
             // One speed, two ways to edit it: clicks per second (default) or the classic h / min / s / ms.
             segSpeed = Seg("speed.cps", "speed.interval");
             segSpeed.AccessibleName = "Speed unit";
             lockable.Add(segSpeed);
             segSpeed.SelectedChanged += delegate { ShowSpeedMode(); OnConfigChanged(this, EventArgs.Empty); };
-            FullRow(body, segSpeed);
+            FullRow(column, segSpeed);
 
-            Grid cps = Table(LabelColumn, "100%");
+            Grid cps = Table(LeftLabels, "100%");
             fCps = Num(Interval.MinCps, Interval.MaxCps, "Clicks per second", "CPS");
             fCps.Decimals = 1;
             fCps.Anchor = AnchorStyles.Left;
             fCps.Dock = DockStyle.None;
-            fCps.Size = Theme.Sz(140, 30);
+            fCps.Size = Theme.Sz(150, RowHeight);
             fCps.ValueChanged += delegate { if (!loading) SetInterval(Interval.FromCps(fCps.Number)); };
             Row(cps, RowLabel("speed.perSecond"), fCps);
             cpsRow = cps;
-            FullRow(body, cps);
+            FullRow(column, cps);
 
             Grid fields = Table("25%", "25%", "25%", "25%");
             fHours = Num(0, 99999, "Hours");
@@ -396,46 +412,48 @@ namespace VClicker
             Row(fields, fHours, fMinutes, fSeconds, fMillis);
             Row(fields, UnitLabel("unit.h"), UnitLabel("unit.min"), UnitLabel("unit.s"), UnitLabel("unit.ms"));
             intervalRow = fields;
-            FullRow(body, fields);
+            FullRow(column, fields);
 
-            var chips = new FlowLayoutPanel
+            // The number row: one key per common speed.
+            int[] presets = { 5, 10, 15, 20, 50 };
+            Grid row = Table("20%", "20%", "20%", "20%", "20%");
+            row.Margin = Theme.Pad(0, 2, 0, 4);
+            var keys = new Control[presets.Length];
+            for (int i = 0; i < presets.Length; i++)
             {
-                AutoSize = true, Dock = DockStyle.Fill, WrapContents = false, Margin = Theme.Pad(0, 2, 0, 6),
-                BackColor = Theme.Surface
-            };
-            foreach (int perSecond in new[] { 5, 10, 15, 20, 50 })
-            {
-                var chip = new FlatButton
+                int perSecond = presets[i];
+                var key = new KeyButton
                 {
-                    Kind = ButtonKind.Chip, Text = perSecond + " CPS", Size = Theme.Sz(66, 26),
-                    Margin = Theme.Pad(0, 0, 6, 0), Font = Theme.Ui(9f, true)
+                    Kind = ButtonKind.Chip, Text = perSecond.ToString(CultureInfo.InvariantCulture), SubLegend = "CPS",
+                    Dock = DockStyle.Fill, Height = Theme.Dp(42), Margin = Theme.Pad(0, 0, i == presets.Length - 1 ? 0 : 6, 0),
+                    Font = Theme.Legend(12f, bold: true)
                 };
-                chip.Click += delegate { SetInterval(1000.0 / perSecond); };
-                chips.Controls.Add(chip);
-                lockable.Add(chip);
+                key.AccessibleName = perSecond + " CPS";
+                key.Click += delegate { SetInterval(1000.0 / perSecond); };
+                keys[i] = key;
+                lockable.Add(key);
             }
-            FullRow(body, chips);
+            Row(row, keys);
+            FullRow(column, row);
 
             rateLabel = new Label
             {
-                AutoSize = true, Font = Theme.Ui(9f), ForeColor = Theme.Dim, BackColor = Theme.Surface,
-                Margin = Theme.Pad(0, 0, 0, 12), UseMnemonic = false
+                AutoSize = true, Font = Theme.Ui(9f), ForeColor = Theme.Dim, BackColor = Theme.Bg,
+                Margin = Theme.Pad(0, 2, 0, 6), UseMnemonic = false
             };
-            FullRow(body, rateLabel);
+            FullRow(column, rateLabel);
 
-            Grid jitterRow = Table(LabelColumn, "100%");
+            Grid jitterRow = Table(LeftLabels, "100%");
             fJitter = Num(0, 50, "Random variation percent", "%");
             fJitter.Anchor = AnchorStyles.Left;
             fJitter.Dock = DockStyle.None;
-            fJitter.Size = Theme.Sz(110, 30);
+            fJitter.Size = Theme.Sz(110, RowHeight);
             fJitter.ValueChanged += OnConfigChanged;
             Label jitterLabel = RowLabel("jitter");
             Row(jitterRow, jitterLabel, fJitter);
             Localize(() => tips.SetToolTip(fJitter, Loc.T("jitter.tip")));
             Localize(() => tips.SetToolTip(jitterLabel, Loc.T("jitter.tip")));
-            FullRow(body, jitterRow);
-
-            return NewCard(body);
+            FullRow(column, jitterRow);
         }
 
         private Label UnitLabel(string key)
@@ -446,10 +464,39 @@ namespace VClicker
             return label;
         }
 
-        private Control BuildClickCard()
+        private void BuildHotkeys(TableLayoutPanel column)
         {
-            Grid body = Table(LabelColumn, "100%");
-            FullRow(body, Title("card.click"));
+            FullRow(column, Heading("card.hotkeys"));
+            hkToggle = Hk(IdToggle);
+            hkStop = Hk(IdStop);
+            hkCapture = Hk(IdCapture);
+            hkToggle.AccessibleName = "Start or stop hotkey";
+            hkStop.AccessibleName = "Stop hotkey";
+            hkCapture.AccessibleName = "Capture position hotkey";
+            hkToggle.ValueChanged += OnHotkeyChanged;
+            hkStop.ValueChanged += OnHotkeyChanged;
+            hkCapture.ValueChanged += OnHotkeyChanged;
+            hkToggle.Margin = hkStop.Margin = Theme.Pad(0, 0, 8, 4);
+            hkCapture.Margin = Theme.Pad(0, 0, 0, 4);
+
+            Grid keys = Table("33%", "34%", "33%");
+            Row(keys, HotkeyCaption("hk.toggle"), HotkeyCaption("hk.stop"), HotkeyCaption("hk.capture"));
+            Row(keys, hkToggle, hkStop, hkCapture);
+            FullRow(column, keys);
+        }
+
+        private Label HotkeyCaption(string key)
+        {
+            Label label = Lbl(key, 8.75f, dim: true);
+            label.Margin = Theme.Pad(0, 0, 4, 4);
+            label.AutoEllipsis = true;
+            return label;
+        }
+
+        private void BuildClick(TableLayoutPanel column)
+        {
+            FullRow(column, Heading("card.click"));
+            Grid body = Table(RightLabels, "100%");
 
             segButton = Seg("button.left", "button.middle", "button.right");
             segType = Seg("type.single", "type.double");
@@ -467,7 +514,7 @@ namespace VClicker
             Row(body, RowLabel("button"), segButton);
             Row(body, RowLabel("type"), segType);
 
-            Grid repeat = Table("60%", "40%");
+            Grid repeat = Table("62%", "38%");
             segRepeat.Margin = Theme.Pad(0, 0, 8, 0);
             fRepeat.Margin = Padding.Empty;
             Row(repeat, segRepeat, fRepeat);
@@ -486,53 +533,50 @@ namespace VClicker
             fDelay = Num(0, 30, "Start delay seconds", "s");
             fDelay.Anchor = AnchorStyles.Left;
             fDelay.Dock = DockStyle.None;
-            fDelay.Size = Theme.Sz(110, 30);
+            fDelay.Size = Theme.Sz(110, RowHeight);
             fDelay.ValueChanged += OnConfigChanged;
             Label delayLabel = RowLabel("delay");
             Row(body, delayLabel, fDelay);
             Localize(() => tips.SetToolTip(fDelay, Loc.T("delay.tip")));
             Localize(() => tips.SetToolTip(delayLabel, Loc.T("delay.tip")));
 
-            return NewCard(body);
+            FullRow(column, body);
         }
 
-        private Control BuildPositionCard()
+        private void BuildPosition(TableLayoutPanel column)
         {
-            Grid body = Table("100%");
-            FullRow(body, Title("card.position"));
+            FullRow(column, Heading("card.position"));
 
             segPosition = Seg("pos.cursor", "pos.fixed");
             segPosition.AccessibleName = "Click position";
             lockable.Add(segPosition);
             segPosition.SelectedChanged += OnConfigChanged;
-            FullRow(body, segPosition);
+            FullRow(column, segPosition);
 
             fX = Num(-32768, 32767, "Position X");
             fY = Num(-32768, 32767, "Position Y");
             fX.ValueChanged += OnConfigChanged;
             fY.ValueChanged += OnConfigChanged;
-            fX.Margin = Theme.Pad(0, 0, 10, 10);
-            fY.Margin = Theme.Pad(0, 0, 10, 10);
+            fX.Margin = fY.Margin = Theme.Pad(0, 0, 12, 8);
 
-            captureButton = new FlatButton
+            captureButton = new KeyButton
             {
-                Kind = ButtonKind.Secondary, Dock = DockStyle.Fill, Margin = Theme.Pad(0, 0, 0, 8), Width = Theme.Dp(100), Height = Theme.Dp(30)
+                Kind = ButtonKind.Secondary, Dock = DockStyle.Fill, Margin = Theme.Pad(0, 0, 0, 8), Width = Theme.Dp(110), Height = Theme.Dp(36)
             };
             captureButton.Click += OnCaptureButton;
             lockable.Add(captureButton);
 
             Grid position = Table("auto", "50%", "auto", "50%", "auto");
             Row(position, Axis("X"), fX, Axis("Y"), fY, captureButton);
-            FullRow(body, position);
-
-            return NewCard(body);
+            FullRow(column, position);
         }
 
-        private Control BuildLockCard()
+        private void BuildLock(TableLayoutPanel column)
         {
-            // Two rows (switch + Choose, app + focus-loss mode) keep the window laptop-sized.
-            Grid body = Table("100%", "auto");
-            FullRow(body, Title("card.lock"));
+            FullRow(column, Heading("card.lock"));
+            // Two rows (switch + Choose, app + focus-loss mode), each its own grid so the wide mode keys never narrow the switch.
+            Grid top = Table("100%", "auto");
+            Grid bottom = Table(RightLabels, "100%"); // the mode keys start on the same line as the click keys above
 
             chkLock = Check("lock.enable");
             chkLock.AccessibleName = "Window Lock";
@@ -541,13 +585,13 @@ namespace VClicker
 
             lockAppLabel = new Label
             {
-                AutoSize = false, Anchor = AnchorStyles.Left | AnchorStyles.Right, Height = Theme.Dp(30),
-                TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Font = Theme.Ui(9.5f, true),
-                BackColor = Theme.Surface, Margin = Theme.Pad(0, 0, 8, 8), UseMnemonic = false
+                AutoSize = false, Anchor = AnchorStyles.Left | AnchorStyles.Right, Height = Theme.Dp(22), // one line: a long name ends in "…" (the tooltip has the exe)
+                TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Font = Theme.Legend(9.75f, bold: true),
+                BackColor = Theme.Bg, Margin = Theme.Pad(0, 0, 10, 8), UseMnemonic = false
             };
-            lockChoose = new FlatButton
+            lockChoose = new KeyButton
             {
-                Kind = ButtonKind.Secondary, Width = Theme.Dp(100), Height = Theme.Dp(30), Margin = Theme.Pad(0, 0, 0, 8),
+                Kind = ButtonKind.Secondary, Width = Theme.Dp(110), Height = Theme.Dp(36), Margin = Theme.Pad(0, 0, 0, 8),
                 AccessibleName = "Choose the app"
             };
             Localize(() =>
@@ -559,18 +603,17 @@ namespace VClicker
             lockable.Add(lockChoose);
             chkLock.Anchor = AnchorStyles.Left;
             lockChoose.Anchor = AnchorStyles.Right;
-            Row(body, chkLock, lockChoose);
+            Row(top, chkLock, lockChoose);
 
             segLockMode = Seg("lock.pause", "lock.stop");
             segLockMode.AccessibleName = "When the app loses focus";
-            segLockMode.Dock = DockStyle.None;
-            segLockMode.Size = Theme.Sz(210, 30);
             lockable.Add(segLockMode);
             segLockMode.SelectedChanged += OnConfigChanged;
             Localize(() => tips.SetToolTip(segLockMode, Loc.T("lock.onFocusLoss")));
-            Row(body, lockAppLabel, segLockMode);
+            Row(bottom, lockAppLabel, segLockMode);
 
-            return NewCard(body);
+            FullRow(column, top);
+            FullRow(column, bottom);
         }
 
         private void ShowLockApp()
@@ -578,6 +621,7 @@ namespace VClicker
             bool none = settings.LockExe.Length == 0;
             lockAppLabel.Text = none ? Loc.T("lock.none") : settings.LockName;
             lockAppLabel.ForeColor = none ? Theme.Dim : Theme.Text;
+            lockAppLabel.Font = Theme.Legend(9.75f, bold: !none);
             tips.SetToolTip(lockAppLabel, none ? null : settings.LockExe);
         }
 
@@ -595,98 +639,15 @@ namespace VClicker
 
         private static Label Axis(string text) => new Label
         {
-            Text = text, AutoSize = true, Font = Theme.Ui(9.5f, true), ForeColor = Theme.Dim,
-            BackColor = Theme.Surface, Anchor = AnchorStyles.Left, Margin = Theme.Pad(0, 0, 8, 10), UseMnemonic = false
+            Text = text, AutoSize = true, Font = Theme.Legend(10f, bold: true), ForeColor = Theme.Dim,
+            BackColor = Theme.Bg, Anchor = AnchorStyles.Left, Margin = Theme.Pad(0, 0, 8, 8), UseMnemonic = false
         };
 
-        private Control BuildRightColumn()
+        /// <summary>Window options as lock keys, two per row; the indicator's corner beside its switch.</summary>
+        private void BuildOptions(TableLayoutPanel column)
         {
-            Grid column = Table("100%");
-            column.BackColor = Theme.Bg;
-            Row(column, BuildStatusCard());
-            Row(column, BuildPositionCard());
-            Row(column, BuildSettingsCard());
-            Row(column, BuildFooter());
-            AddFiller(column);
-            return column;
-        }
-
-        private Control BuildStatusCard()
-        {
-            Grid body = Table("100%");
-
-            badge = new Badge { Anchor = AnchorStyles.Left, Margin = Theme.Pad(0, 0, 0, 12) };
-            FullRow(body, badge);
-
-            Grid tiles = Table("24%", "26%", "26%", "24%");
-            Row(tiles, Tile("stat.clicks", out clicksValue), Tile("stat.requested", out requestedValue),
-                Tile("stat.sent", out sentValue), Tile("stat.time", out timeValue));
-            tiles.Margin = Theme.Pad(0, 0, 0, 4);
-            FullRow(body, tiles);
-
-            // Honest about what is measured: what Windows accepted, not what the game recognised.
-            Label sentNote = Lbl("stat.note", 8f, dim: true);
-            sentNote.Margin = Theme.Pad(0, 0, 0, 10);
-            sentNote.MaximumSize = new Size(Theme.Dp(300), 0);
-            Localize(() => tips.SetToolTip(sentNote, Loc.T("stat.note.tip")));
-            FullRow(body, sentNote);
-
-            startButton = new FlatButton
-            {
-                Kind = ButtonKind.Primary, Dock = DockStyle.Fill, Height = Theme.Dp(48), Margin = Theme.Pad(0, 0, 0, 10),
-                Font = Theme.Ui(12f, true), AccessibleName = "Start or stop clicking"
-            };
-            startButton.Click += delegate { Toggle(false); };
-            FullRow(body, startButton);
-
-            notice = new Label
-            {
-                AutoSize = false, AutoEllipsis = true, Height = Theme.Dp(38), Dock = DockStyle.Fill, Font = Theme.Ui(9f), ForeColor = Theme.Dim,
-                BackColor = Theme.Surface, Margin = Theme.Pad(0, 0, 0, 6), UseMnemonic = false
-            };
-            FullRow(body, notice);
-
-            return NewCard(body);
-        }
-
-        private Control Tile(string captionKey, out Label value)
-        {
-            Grid tile = Table("100%");
-            tile.Margin = Padding.Empty;
-            Label caption = Lbl(captionKey, 8f, dim: true, semibold: true);
-            caption.Margin = Theme.Pad(0, 0, 0, 2);
-            value = new Label
-            {
-                AutoSize = true, Font = Theme.Ui(14f, true), ForeColor = Theme.Text, BackColor = Theme.Surface,
-                Margin = Padding.Empty, Text = "0", UseMnemonic = false
-            };
-            Row(tile, caption);
-            Row(tile, value);
-            return tile;
-        }
-
-        /// <summary>
-        /// Hotkeys and options in one card (one header and padding fewer keeps the window laptop-sized).
-        /// One grid, no nesting: 33 / 17 / 17 / 33 % columns give three equal hotkey cells and two equal option cells.
-        /// </summary>
-        private Control BuildSettingsCard()
-        {
-            Grid body = Table("33%", "17%", "17%", "33%");
-            FullRow(body, Title("card.hotkeys"));
-
-            hkToggle = Hk(IdToggle);
-            hkStop = Hk(IdStop);
-            hkCapture = Hk(IdCapture);
-            hkToggle.AccessibleName = "Start or stop hotkey";
-            hkStop.AccessibleName = "Stop hotkey";
-            hkCapture.AccessibleName = "Capture position hotkey";
-            hkToggle.ValueChanged += OnHotkeyChanged;
-            hkStop.ValueChanged += OnHotkeyChanged;
-            hkCapture.ValueChanged += OnHotkeyChanged;
-            hkToggle.Margin = hkStop.Margin = Theme.Pad(0, 0, 6, 12);
-            hkCapture.Margin = Theme.Pad(0, 0, 0, 12);
-            Thirds(body, HotkeyCaption("hk.toggle"), HotkeyCaption("hk.stop"), HotkeyCaption("hk.capture"));
-            Thirds(body, hkToggle, hkStop, hkCapture);
+            FullRow(column, Heading("card.options"));
+            Grid body = Table("50%", "50%");
 
             chkTop = Check("opt.top");
             chkSounds = Check("opt.sounds");
@@ -695,40 +656,21 @@ namespace VClicker
             Localize(() => tips.SetToolTip(chkHud, Loc.T("opt.hud.tip")));
             segHudCorner = new Segmented
             {
-                Items = new[] { "↖", "↗", "↙", "↘" }, Size = Theme.Sz(150, 28), Anchor = AnchorStyles.Left,
-                Margin = Theme.Pad(0, 0, 0, 6), AccessibleName = "Indicator corner"
+                Glyphs = new[] { Glyph.CornerTopLeft, Glyph.CornerTopRight, Glyph.CornerBottomLeft, Glyph.CornerBottomRight },
+                Size = Theme.Sz(150, 34), Anchor = AnchorStyles.Right, Margin = Theme.Pad(0, 0, 0, 6), AccessibleName = "Indicator corner"
             };
+            Localize(() => segHudCorner.Items = new[] { Loc.T("corner.0"), Loc.T("corner.1"), Loc.T("corner.2"), Loc.T("corner.3") });
             segHudCorner.SelectedChanged += OnConfigChanged;
-            Halves(body, chkTop, chkSounds);
+
+            Row(body, chkTop, chkSounds);
             FullRow(body, chkTray);
-            Halves(body, chkHud, segHudCorner);
-            return NewCard(body);
+            Row(body, chkHud, segHudCorner);
+            FullRow(column, body);
         }
 
-        private static void Thirds(TableLayoutPanel table, Control a, Control b, Control c)
+        private LedCheck Check(string key)
         {
-            Row(table, a, b, null, c);
-            table.SetColumnSpan(b, 2);
-        }
-
-        private static void Halves(TableLayoutPanel table, Control a, Control b)
-        {
-            Row(table, a, null, b);
-            table.SetColumnSpan(a, 2);
-            table.SetColumnSpan(b, 2);
-        }
-
-        private Label HotkeyCaption(string key)
-        {
-            Label label = Lbl(key, 8.5f, dim: true);
-            label.Margin = Theme.Pad(0, 0, 4, 4);
-            label.AutoEllipsis = true;
-            return label;
-        }
-
-        private DarkCheck Check(string key)
-        {
-            var check = new DarkCheck { Margin = Theme.Pad(0, 0, 0, 6), Anchor = AnchorStyles.Left };
+            var check = new LedCheck { Margin = Theme.Pad(0, 0, 0, 6), Anchor = AnchorStyles.Left };
             Localize(() => check.Text = Loc.T(key));
             check.CheckedChanged += OnConfigChanged;
             return check;
@@ -737,22 +679,30 @@ namespace VClicker
         private Control BuildFooter()
         {
             Grid footer = Table("auto", "100%");
-            footer.BackColor = Theme.Bg;
-            footer.Margin = Theme.Pad(2, 0, 0, 0);
+            footer.Margin = Theme.Pad(0, 8, 0, 0);
 
-            var github = new LinkLabel
+            // "Made by Vemryx  ·  GitHub  ·  v1.0.0": the maker's name and GitHub are links, the rest is plain.
+            var credits = new LinkLabel
             {
-                Text = "GitHub  ·  v" + Assembly.GetExecutingAssembly().GetName().Version.ToString(3),
-                AutoSize = true, Font = Theme.Ui(9f), BackColor = Theme.Bg, Anchor = AnchorStyles.Left,
-                LinkColor = Theme.Dim, ActiveLinkColor = Theme.Accent, VisitedLinkColor = Theme.Dim,
+                AutoSize = true, Font = Theme.Legend(9f), BackColor = Theme.Bg, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Theme.Dim, UseCompatibleTextRendering = true,
+                LinkColor = Theme.Text, ActiveLinkColor = Theme.Cap, VisitedLinkColor = Theme.Text,
                 LinkBehavior = LinkBehavior.HoverUnderline, Margin = Padding.Empty
             };
-            github.LinkClicked += delegate { OpenUrl(RepoUrl); };
+            Localize(() =>
+            {
+                string maker = Loc.F("madeBy", MakerName);
+                credits.Text = maker + "  ·  GitHub  ·  v" + Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
+                credits.Links.Clear();
+                credits.Links.Add(maker.IndexOf(MakerName, StringComparison.Ordinal), MakerName.Length, MakerUrl);
+                credits.Links.Add(credits.Text.IndexOf("GitHub", StringComparison.Ordinal), "GitHub".Length, RepoUrl);
+                tips.SetToolTip(credits, MakerUrl.Replace("https://", string.Empty));
+            });
+            credits.LinkClicked += (sender, e) => OpenUrl((string)e.Link.LinkData);
 
             adminLink = new LinkLabel
             {
-                AutoSize = true, Font = Theme.Ui(9f), BackColor = Theme.Bg, Anchor = AnchorStyles.Right,
-                LinkColor = Theme.Accent, ActiveLinkColor = Theme.AccentHover, VisitedLinkColor = Theme.Accent,
+                AutoSize = true, Font = Theme.Legend(9f), BackColor = Theme.Bg, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, UseCompatibleTextRendering = true, // both links measured the same way (a split link label uses GDI+)
+                LinkColor = Theme.Text, ActiveLinkColor = Theme.Cap, VisitedLinkColor = Theme.Text,
                 LinkBehavior = LinkBehavior.HoverUnderline, Margin = Padding.Empty
             };
             adminLink.LinkClicked += delegate { RestartAsAdministrator(); };
@@ -760,7 +710,7 @@ namespace VClicker
             {
                 adminLink.Enabled = false;
                 adminLink.LinkColor = adminLink.DisabledLinkColor = Theme.Success;
-                Localize(() => adminLink.Text = "● " + Loc.T("admin.on"));
+                Localize(() => adminLink.Text = Loc.T("admin.on"));
             }
             else
             {
@@ -771,7 +721,7 @@ namespace VClicker
                 });
             }
 
-            Row(footer, github, adminLink);
+            Row(footer, credits, adminLink);
             return footer;
         }
 
@@ -784,7 +734,7 @@ namespace VClicker
             trayExit = new ToolStripMenuItem();
             trayExit.Click += delegate { Close(); };
 
-            var menu = new ContextMenuStrip();
+            var menu = new ContextMenuStrip { Renderer = new KeyMenuRenderer(), Font = Theme.Ui(9.5f), ShowImageMargin = false };
             menu.Items.AddRange(new ToolStripItem[] { trayShow, trayToggle, new ToolStripSeparator(), trayExit });
 
             tray = new NotifyIcon { Icon = Icon, Text = "V-Clicker", ContextMenuStrip = menu, Visible = false };
@@ -1005,8 +955,12 @@ namespace VClicker
         private void UpdateStartButton()
         {
             bool running = engine.Phase != EnginePhase.Idle;
+            // While a run is on, the key stays down and turns into the stop key.
             startButton.Kind = running ? ButtonKind.Danger : ButtonKind.Primary;
-            startButton.Text = Loc.T(running ? "stop" : "start") + "   ·   " + hkToggle.Value;
+            startButton.Latched = running;
+            startButton.Text = Loc.T(running ? "stop" : "start");
+            startButton.SubLegend = hkToggle.Value.ToString();
+            startButton.AccessibleName = startButton.Text + " (" + hkToggle.Value + ")";
             trayToggle.Text = Loc.T(running ? "stop" : "start");
             tips.SetToolTip(captureButton, Loc.F("capture.tip", hkCapture.Value));
         }
@@ -1365,15 +1319,14 @@ namespace VClicker
 
         private void ShowNotice(string text, Color color, int seconds)
         {
-            notice.Text = text;
-            notice.ForeColor = color;
+            display.SetMessage(text, color);
             noticeExpires = seconds > 0 ? Stopwatch.GetTimestamp() + seconds * Stopwatch.Frequency : 0;
         }
 
+        /// <summary>The display's resting message: honest about what the readouts measure (the hotkeys are on their keys).</summary>
         private void ShowHint()
         {
-            notice.Text = Loc.F("hint", hkToggle.Value, hkStop.Value, hkCapture.Value);
-            notice.ForeColor = Theme.Dim;
+            display.SetMessage(Loc.T("stat.note"), Theme.Dim);
             noticeExpires = 0;
         }
 
@@ -1381,49 +1334,49 @@ namespace VClicker
         {
             EnginePhase phase = engine.Phase;
             long clicks = engine.Clicks;
-            clicksValue.Text = clicks.ToString("N0", CultureInfo.CurrentCulture);
-            timeValue.Text = FormatElapsed(engine.SessionElapsed);
-            requestedValue.Text = FormatCps(Interval.ClicksPerSecond(settings.IntervalMs));
+            display.SetRate(FormatCps(Interval.ClicksPerSecond(settings.IntervalMs)), Loc.T("stat.requested"));
+            display.SetReadout(0, Loc.T("stat.clicks"), clicks.ToString("N0", CultureInfo.CurrentCulture));
+            display.SetReadout(2, Loc.T("stat.time"), FormatElapsed(engine.SessionElapsed));
+            display.SetLock(settings.WindowLock, "LOCK");
 
             long now = Stopwatch.GetTimestamp();
+            string sentText = "—";
             if (phase == EnginePhase.Clicking)
             {
                 // Average over a few intervals (at least 2 s) so slow and fast rates both read steadily.
                 double sent = sentRate.Sample(clicks, engine.LastClickStamp, Math.Max(2, 3 * settings.IntervalMs / 1000));
-                sentValue.Text = double.IsNaN(sent) ? "\u2014" : FormatCps(sent);
+                if (!double.IsNaN(sent)) sentText = FormatCps(sent);
             }
             else
             {
                 sentRate.Reset(); // after a pause, measure the resumed clicking only
-                sentValue.Text = "\u2014";
             }
+            display.SetReadout(1, Loc.T("stat.sent"), sentText);
 
             switch (phase)
             {
                 case EnginePhase.Countdown:
-                    badge.Dot = Theme.Warning;
-                    badge.Text = Loc.F("status.countdown",
-                        engine.CountdownRemaining.TotalSeconds.ToString("0.0", CultureInfo.CurrentCulture) + " s");
+                    display.SetStatus(Theme.Warning, true, Loc.F("status.countdown",
+                        engine.CountdownRemaining.TotalSeconds.ToString("0.0", CultureInfo.CurrentCulture) + " s"));
                     break;
                 case EnginePhase.Clicking:
-                    badge.Dot = Theme.Success;
-                    badge.Text = Loc.T("status.clicking");
+                    display.SetStatus(Theme.Success, true, Loc.T("status.clicking"));
                     break;
                 case EnginePhase.Paused:
-                    badge.Dot = Theme.Warning;
-                    badge.Text = PausedText();
+                    display.SetStatus(Theme.Warning, true, PausedText());
                     break;
                 default:
-                    badge.Dot = lastStop == StopReason.Blocked ? Theme.Danger
+                    // Stopped: the lamp is dark, unless it reports how the last run ended.
+                    Color led = lastStop == StopReason.Blocked ? Theme.Danger
                               : lastStop == StopReason.Completed ? Theme.Success
-                              : lastStop.HasValue && lastStop.Value >= StopReason.FocusLost ? Theme.Warning : Theme.Dim;
-                    badge.Text = lastStop == StopReason.Blocked ? Loc.T("status.blocked")
-                               : lastStop == StopReason.Completed ? Loc.T("status.done")
-                               : Loc.T("status.idle");
+                              : lastStop.HasValue && lastStop.Value >= StopReason.FocusLost ? Theme.Warning : Theme.Success;
+                    bool lit = lastStop == StopReason.Blocked || lastStop == StopReason.Completed ||
+                               (lastStop.HasValue && lastStop.Value >= StopReason.FocusLost);
+                    display.SetStatus(led, lit, lastStop == StopReason.Blocked ? Loc.T("status.blocked")
+                                              : lastStop == StopReason.Completed ? Loc.T("status.done")
+                                              : Loc.T("status.idle"));
                     break;
             }
-            Size badgeSize = badge.GetPreferredSize(Size.Empty);
-            badge.Size = new Size(Math.Min(badgeSize.Width, Theme.Dp(300)), badgeSize.Height); // long app names end in "…"
             UpdateTray(phase);
             UpdateHud(phase);
 
@@ -1438,7 +1391,7 @@ namespace VClicker
         {
             Icon icon = phase == EnginePhase.Clicking ? trayClicking
                       : phase == EnginePhase.Idle ? Icon : trayPaused;
-            string text = phase == EnginePhase.Idle ? "V-Clicker" : "V-Clicker - " + badge.Text;
+            string text = phase == EnginePhase.Idle ? "V-Clicker" : "V-Clicker - " + display.Status;
             Tuple<Color, string> macro = phase == EnginePhase.Idle ? studio?.Indicator : null;
             if (macro != null && macro.Item1 != Theme.Dim)
             {
@@ -1553,6 +1506,7 @@ namespace VClicker
         {
             base.OnHandleCreated(e);
             Native.StyleTitleBar(Handle, ColorRef(Theme.Bg), ColorRef(Theme.Text), ColorRef(Theme.Border));
+            Native.SetWindowTheme(Handle, "DarkMode_Explorer", null); // dark scroll bars on short screens
             hotkeys = new HotkeyRegistry(Handle);
             RegisterAllHotkeys();
         }

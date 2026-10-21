@@ -22,8 +22,8 @@ namespace VClicker
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
             Font = Theme.Ui(9.5f);
-            Padding = Theme.Pad(16);
-            ClientSize = Theme.Sz(460, 380);
+            Padding = Theme.Pad(18);
+            ClientSize = Theme.Sz(480, 400);
 
             var label = new Label
             {
@@ -46,23 +46,25 @@ namespace VClicker
             list.DoubleClick += delegate { if (list.SelectedItem != null) Accept(); };
             list.Format += (sender, e) => e.Value = ((AppWindow)e.ListItem).DisplayName + " - " + ((AppWindow)e.ListItem).Title;
 
-            var ok = new FlatButton { Kind = ButtonKind.Primary, Size = Theme.Sz(120, 34), Margin = Theme.Pad(8, 0, 0, 0) };
+            var ok = new KeyButton { Kind = ButtonKind.Primary, Size = Theme.Sz(120, 36), Margin = Theme.Pad(8, 0, 0, 0) };
             ok.Text = Loc.T("picker.ok");
             ok.Enabled = list.Items.Count > 0;
             ok.Click += delegate { Accept(); };
-            var cancel = new FlatButton { Kind = ButtonKind.Secondary, Size = Theme.Sz(120, 34), Margin = Padding.Empty };
+            var cancel = new KeyButton { Kind = ButtonKind.Secondary, Size = Theme.Sz(120, 36), Margin = Padding.Empty };
             cancel.Text = Loc.T("picker.cancel");
             cancel.Click += delegate { DialogResult = DialogResult.Cancel; };
 
             var buttons = new FlowLayoutPanel
             {
-                Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, Height = Theme.Dp(50),
-                Padding = Theme.Pad(0, 12, 0, 0), BackColor = Theme.Bg
+                Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, Height = Theme.Dp(56),
+                Padding = Theme.Pad(0, 14, 0, 0), BackColor = Theme.Bg
             };
             buttons.Controls.Add(ok);
             buttons.Controls.Add(cancel);
 
-            Controls.Add(list);
+            var well = new WellPanel { Dock = DockStyle.Fill, Padding = Theme.Pad(6) };
+            well.Controls.Add(list);
+            Controls.Add(well);
             Controls.Add(label);
             Controls.Add(buttons);
             if (list.Items.Count == 0)
@@ -105,6 +107,7 @@ namespace VClicker
         {
             base.OnHandleCreated(e);
             Native.StyleTitleBar(Handle, MainForm.ColorRef(Theme.Bg), MainForm.ColorRef(Theme.Text), MainForm.ColorRef(Theme.Border));
+            Native.SetWindowTheme(list.Handle, "DarkMode_Explorer", null);
         }
 
         private void DrawWindow(object sender, DrawItemEventArgs e)
@@ -112,8 +115,18 @@ namespace VClicker
             if (e.Index < 0) return;
             var window = (AppWindow)list.Items[e.Index];
             bool selected = (e.State & DrawItemState.Selected) != 0;
-            using (var back = new SolidBrush(selected ? Theme.Mix(Theme.Field, Theme.Accent, 0.35f) : Theme.Field))
+            using (var back = new SolidBrush(Theme.Field))
                 e.Graphics.FillRectangle(back, e.Bounds);
+            if (selected)
+            {
+                Theme.Smooth(e.Graphics);
+                float k = Theme.Scale;
+                var bar = new RectangleF(e.Bounds.Left + k, e.Bounds.Top + k, e.Bounds.Width - 2 * k, e.Bounds.Height - 2 * k);
+                using (System.Drawing.Drawing2D.GraphicsPath path = Theme.RoundRect(bar, 5 * k))
+                using (var fill = new SolidBrush(Theme.Key))
+                    e.Graphics.FillPath(fill, path);
+                if (list.Focused) Theme.DrawFocus(e.Graphics, bar, 5 * k);
+            }
 
             int pad = Theme.Dp(10), size = Theme.Dp(20);
             Icon icon = IconFor(window.ExePath);
@@ -125,7 +138,7 @@ namespace VClicker
             var titleArea = new Rectangle(left, e.Bounds.Top + e.Bounds.Height / 2, e.Bounds.Right - left - pad, e.Bounds.Height / 2 - Theme.Dp(3));
             const TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix |
                                           TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter;
-            TextRenderer.DrawText(e.Graphics, window.DisplayName + "  (" + window.ExeName + ")", Theme.Ui(9.5f, true), nameArea, Theme.Text, flags);
+            TextRenderer.DrawText(e.Graphics, window.DisplayName + "  (" + window.ExeName + ")", Theme.Legend(10f, bold: true), nameArea, Theme.Text, flags);
             // Several windows of one game look alike; the process id tells them apart.
             TextRenderer.DrawText(e.Graphics, window.Title + "  \u00b7  PID " + window.ProcessId, Theme.Ui(8.5f), titleArea, Theme.Dim, flags);
         }

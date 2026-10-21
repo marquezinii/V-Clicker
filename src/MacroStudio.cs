@@ -66,11 +66,11 @@ namespace VClicker
         private string flashText;
         private long flashUntil;
 
-        private ComboBox macroList;
-        private FlatButton bNew, bRename, bDelete, bSave, bRecord, bRun, bStop;
+        private ChoiceBox macroList;
+        private KeyButton bNew, bRename, bDelete, bSave, bRecord, bRun, bStop;
         private NumberField fRepeat;
-        private DarkCheck chkForever;
-        private Badge status;
+        private LedCheck chkForever;
+        private LedBadge status;
         private Label statusText;
         private TableLayoutPanel banners;
         private ListBox list;
@@ -78,7 +78,7 @@ namespace VClicker
         private Panel detail;
         private readonly List<Action> detailCommits = new List<Action>();
         private Label detailTitle; // the selected step as a sentence: kept current while its values are edited
-        private FlatButton bUp, bDown, bDuplicate, bRemove, bAddWait, bAddCondition, bUndo, bRedo;
+        private KeyButton bUp, bDown, bDuplicate, bRemove, bAddWait, bAddCondition, bUndo, bRedo;
 
         internal MacroStudio(MainForm host, ClickSettings settings, string settingsPath)
         {
@@ -429,9 +429,10 @@ namespace VClicker
             apply();
         }
 
-        private FlatButton Button(string key, ButtonKind kind, EventHandler click, int width = 100)
+        private KeyButton Button(string key, ButtonKind kind, EventHandler click, int width = 100)
         {
-            var button = new FlatButton { Kind = kind, Size = Theme.Sz(width, 32), Margin = Theme.Pad(0, 0, 8, 0) };
+            var button = new KeyButton { Kind = kind, Size = Theme.Sz(width, 36), Margin = Theme.Pad(0, 0, 8, 0) };
+            if (kind == ButtonKind.Chip) button.Font = Theme.Legend(9f, bold: true);
             Localize(() => button.Text = Loc.T(key));
             button.Click += click;
             return button;
@@ -440,68 +441,65 @@ namespace VClicker
         private static FlowLayoutPanel Bar() => new FlowLayoutPanel
         {
             Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false,
-            BackColor = Theme.Bg, Margin = Padding.Empty, Padding = Theme.Pad(0, 0, 0, 10)
+            BackColor = Theme.Bg, Margin = Padding.Empty, Padding = Theme.Pad(0, 0, 0, 12)
         };
 
         private void BuildLayout()
         {
             // Top: which macro, and the file actions.
             FlowLayoutPanel top = Bar();
-            macroList = new ComboBox
-            {
-                DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat, BackColor = Theme.Field,
-                ForeColor = Theme.Text, Font = Theme.Ui(10f), Width = Theme.Dp(300), Margin = Theme.Pad(0, 2, 8, 0)
-            };
+            macroList = new ChoiceBox { Size = Theme.Sz(300, 36), Margin = Theme.Pad(0, 0, 10, 0) };
             macroList.AccessibleName = "Macro";
-            macroList.DrawMode = DrawMode.OwnerDrawFixed;
-            macroList.ItemHeight = Theme.Dp(24);
-            macroList.DrawItem += (sender, e) =>
-            {
-                bool hot = (e.State & DrawItemState.Selected) != 0 && (e.State & DrawItemState.ComboBoxEdit) == 0;
-                using (var back = new SolidBrush(hot ? Theme.Mix(Theme.Field, Theme.Accent, 0.35f) : Theme.Field))
-                    e.Graphics.FillRectangle(back, e.Bounds);
-                if (e.Index >= 0)
-                    TextRenderer.DrawText(e.Graphics, macroList.Items[e.Index].ToString(), macroList.Font,
-                        new Rectangle(e.Bounds.X + Theme.Dp(6), e.Bounds.Y, e.Bounds.Width - Theme.Dp(8), e.Bounds.Height), Theme.Text,
-                        TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
-            };
             macroList.SelectedIndexChanged += OnMacroChosen;
-            bNew = Button("studio.new", ButtonKind.Secondary, delegate { NewMacro(); }, 80);
-            bRename = Button("studio.rename", ButtonKind.Secondary, delegate { RenameMacro(); }, 100);
-            bDelete = Button("studio.delete", ButtonKind.Secondary, delegate { DeleteMacro(); }, 90);
-            bSave = Button("studio.save", ButtonKind.Secondary, delegate { Save(); }, 90);
+            bNew = Button("studio.new", ButtonKind.Secondary, delegate { NewMacro(); }, 84);
+            bRename = Button("studio.rename", ButtonKind.Secondary, delegate { RenameMacro(); }, 104);
+            bDelete = Button("studio.delete", ButtonKind.Secondary, delegate { DeleteMacro(); }, 94);
+            bSave = Button("studio.save", ButtonKind.Secondary, delegate { Save(); }, 94);
             top.Controls.AddRange(new Control[] { macroList, bNew, bRename, bDelete, bSave });
 
-            // Second: record / run, how many times, stop.
+            // Second: record / run, how many times, stop. Record is a graphite key with a red lamp that lights while it records.
             FlowLayoutPanel run = Bar();
-            bRecord = Button("studio.record", ButtonKind.Danger, delegate { BeginRecording(); }, 110);
-            bRun = Button("studio.run", ButtonKind.Primary, delegate { BeginRun(); }, 110);
-            bStop = Button("studio.stop", ButtonKind.Secondary, delegate { StopAll(MacroStopReason.Manual); }, 90);
+            bRecord = Button("studio.record", ButtonKind.Secondary, delegate { BeginRecording(); }, 118);
+            bRecord.Led = Theme.Danger;
+            bRun = Button("studio.run", ButtonKind.Primary, delegate { BeginRun(); }, 118);
+            bStop = Button("studio.stop", ButtonKind.Secondary, delegate { StopAll(MacroStopReason.Manual); }, 94);
             var repeatLabel = new Label
             {
-                AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Margin = Theme.Pad(16, 8, 8, 0), UseMnemonic = false
+                AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Font = Theme.Legend(9.75f),
+                Margin = Theme.Pad(18, 9, 8, 0), UseMnemonic = false
             };
             Localize(() => repeatLabel.Text = Loc.T("studio.repeat"));
-            fRepeat = new NumberField { Minimum = 1, Maximum = 1000000, Size = Theme.Sz(90, 32), Margin = Theme.Pad(0, 0, 12, 0) };
+            fRepeat = new NumberField { Minimum = 1, Maximum = 1000000, Size = Theme.Sz(92, 36), Margin = Theme.Pad(0, 0, 14, 0) };
             fRepeat.Number = 1;
             fRepeat.FieldName = "Repetitions";
             fRepeat.ValueChanged += delegate { if (!loadingUi) SetRepeat(); };
-            chkForever = new DarkCheck { Margin = Theme.Pad(0, 4, 0, 0) };
+            chkForever = new LedCheck { Margin = Theme.Pad(0, 5, 0, 0) };
             Localize(() => chkForever.Text = Loc.T("studio.forever"));
             chkForever.CheckedChanged += delegate { if (!loadingUi) SetRepeat(); };
             run.Controls.AddRange(new Control[] { bRecord, bRun, bStop, repeatLabel, fRepeat, chkForever });
 
-            // Status line: always visible, the same text the indicator shows (it may be turned off).
+            // The display: the status line (the same text the indicator shows, which may be turned off), then what to know
+            // about this macro, on one glass, like the main window's display.
+            var display = new WellPanel
+            {
+                Look = WellLook.Glass, Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = Theme.Pad(14, 10, 14, 10)
+            };
+            var glassBody = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, BackColor = Theme.Glass
+            };
+            glassBody.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             var statusRow = new TableLayoutPanel
             {
-                Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = Theme.Bg, Padding = Theme.Pad(0, 0, 0, 10)
+                Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, BackColor = Theme.Glass, Margin = Padding.Empty
             };
             statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            status = new Badge { Margin = Theme.Pad(0, 0, 12, 0), Anchor = AnchorStyles.Left };
+            status = new LedBadge { Margin = Theme.Pad(0, 0, 8, 0), Anchor = AnchorStyles.Left };
             statusText = new Label
             {
-                AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, BackColor = Theme.Bg,
+                AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, BackColor = Theme.Glass,
                 ForeColor = Theme.Dim, AutoEllipsis = true, UseMnemonic = false
             };
             statusRow.Controls.Add(status, 0, 0);
@@ -509,61 +507,66 @@ namespace VClicker
 
             banners = new TableLayoutPanel
             {
-                Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1,
-                BackColor = Theme.Bg, Margin = Padding.Empty
+                Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1,
+                BackColor = Theme.Glass, Margin = Padding.Empty
             };
             banners.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            glassBody.Controls.Add(statusRow);
+            glassBody.Controls.Add(banners);
+            display.Controls.Add(glassBody);
+            var gap = new Panel { Dock = DockStyle.Top, Height = Theme.Dp(12), BackColor = Theme.Bg };
 
             // Bottom: edit actions for the selected step.
             FlowLayoutPanel edits = Bar();
             edits.Dock = DockStyle.Bottom;
-            edits.Padding = Theme.Pad(0, 10, 0, 0);
-            bUp = Button("studio.up", ButtonKind.Chip, delegate { MoveStep(-1); }, 70);
-            bDown = Button("studio.down", ButtonKind.Chip, delegate { MoveStep(1); }, 70);
-            bDuplicate = Button("studio.duplicate", ButtonKind.Chip, delegate { Duplicate(); }, 90);
-            bRemove = Button("studio.remove", ButtonKind.Chip, delegate { Remove(); }, 80);
-            bAddWait = Button("studio.addWait", ButtonKind.Chip, delegate { InsertWait(); }, 80);
-            bAddCondition = Button("studio.addCondition", ButtonKind.Chip, delegate { BeginCapture(list.SelectedIndex + 1, CaptureFor.Insert); }, 100);
-            bUndo = Button("studio.undo", ButtonKind.Chip, delegate { Undo(); }, 80);
-            bRedo = Button("studio.redo", ButtonKind.Chip, delegate { Redo(); }, 80);
+            edits.Padding = Theme.Pad(0, 12, 0, 0);
+            bUp = Button("studio.up", ButtonKind.Chip, delegate { MoveStep(-1); }, 72);
+            bDown = Button("studio.down", ButtonKind.Chip, delegate { MoveStep(1); }, 78);
+            bDuplicate = Button("studio.duplicate", ButtonKind.Chip, delegate { Duplicate(); }, 96);
+            bRemove = Button("studio.remove", ButtonKind.Chip, delegate { Remove(); }, 82);
+            bAddWait = Button("studio.addWait", ButtonKind.Chip, delegate { InsertWait(); }, 84);
+            bAddCondition = Button("studio.addCondition", ButtonKind.Chip, delegate { BeginCapture(list.SelectedIndex + 1, CaptureFor.Insert); }, 108);
+            bUndo = Button("studio.undo", ButtonKind.Chip, delegate { Undo(); }, 86);
+            bRedo = Button("studio.redo", ButtonKind.Chip, delegate { Redo(); }, 86);
             edits.Controls.AddRange(new Control[] { bUp, bDown, bDuplicate, bRemove, bAddWait, bAddCondition, bUndo, bRedo });
 
-            // Middle: the steps, and the selected step's values.
+            // Middle: the steps in a recess, and the selected step's values on the plate beside it.
             var middle = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Theme.Bg };
-            middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
-            middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
+            middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
+            middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
             middle.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            var listCard = new Card { Dock = DockStyle.Fill, Margin = Theme.Pad(0, 0, 12, 0), Padding = Theme.Pad(6) };
+            var listWell = new WellPanel { Dock = DockStyle.Fill, Margin = Theme.Pad(0, 0, 18, 0), Padding = Theme.Pad(6) };
             list = new ListBox
             {
-                Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = Theme.Surface, ForeColor = Theme.Text,
-                DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = Theme.Dp(30), IntegralHeight = false, Font = Theme.Ui(10f)
+                Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = Theme.Field, ForeColor = Theme.Text,
+                DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = Theme.Dp(32), IntegralHeight = true, Font = Theme.Ui(10f)
             };
             list.AccessibleName = "Steps";
             list.DrawItem += DrawStep;
             list.SelectedIndexChanged += delegate { ShowDetail(); UpdateEnabled(); };
             emptyHint = new Label
             {
-                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Theme.Dim, BackColor = Theme.Surface,
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Theme.Dim, BackColor = Theme.Field,
                 UseMnemonic = false, Padding = Theme.Pad(24)
             };
             Localize(() => emptyHint.Text = Loc.T("studio.empty"));
-            listCard.Controls.Add(list);
-            listCard.Controls.Add(emptyHint);
+            listWell.Controls.Add(list);
+            listWell.Controls.Add(emptyHint);
 
-            var detailCard = new Card { Dock = DockStyle.Fill, Margin = Padding.Empty };
-            detail = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Surface, AutoScroll = true };
-            detailCard.Controls.Add(detail);
+            // The selected step's values scroll inside an outlined pane that ends level with the list.
+            var detailFrame = new WellPanel { Look = WellLook.Frame, Dock = DockStyle.Fill, Margin = Padding.Empty, Padding = Theme.Pad(14, 10, 4, 10) };
+            detail = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Bg, AutoScroll = true, Margin = Padding.Empty };
+            detailFrame.Controls.Add(detail);
 
-            middle.Controls.Add(listCard, 0, 0);
-            middle.Controls.Add(detailCard, 1, 0);
+            middle.Controls.Add(listWell, 0, 0);
+            middle.Controls.Add(detailFrame, 1, 0);
 
             // Docked controls are laid out last-added-first: the fill goes in first.
             Controls.Add(middle);
             Controls.Add(edits);
-            Controls.Add(banners);
-            Controls.Add(statusRow);
+            Controls.Add(gap);
+            Controls.Add(display);
             Controls.Add(run);
             Controls.Add(top);
 
@@ -572,73 +575,70 @@ namespace VClicker
 
         private Label Note(string text, Color color, float size = 9.5f, bool semibold = false) => new Label
         {
-            Text = text, AutoSize = true, ForeColor = color, BackColor = Theme.Surface, Font = Theme.Ui(size, semibold),
+            Text = text, AutoSize = true, ForeColor = color, BackColor = Theme.Bg, Font = Theme.Ui(size, semibold),
             UseMnemonic = false, Margin = Theme.Pad(0, 0, 0, 6), MaximumSize = new Size(Theme.Dp(300), 0)
         };
 
         // ------------------------------------------------------------------ banners
 
-        private Card BannerCard() => new Card
+        /// <summary>One block of the display's message area, under a hairline.</summary>
+        private static TableLayoutPanel GlassBlock(int columns) => new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = Theme.Pad(0, 0, 0, 8), Padding = Theme.Pad(14, 10, 14, 10)
+            Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = columns,
+            BackColor = Theme.Glass, Margin = Theme.Pad(0, 10, 0, 0), Padding = Theme.Pad(0, 10, 0, 0)
         };
 
         private int BannerTextWidth(int reserved) =>
-            Math.Max(Theme.Dp(280), ClientSize.Width - Padding.Horizontal - Theme.Dp(40) - reserved);
+            Math.Max(Theme.Dp(280), ClientSize.Width - Padding.Horizontal - Theme.Dp(48) - reserved);
 
-        /// <summary>A notice that asks for a decision: title and text on the left, the button on the right.</summary>
+        /// <summary>A notice that asks for a decision: title and text on the left, the key on the right.</summary>
         private Control ActionBanner(string title, string text, Color accent, string buttonKey, Action click)
         {
-            Card card = BannerCard();
-            var body = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2,
-                BackColor = Theme.Surface
-            };
+            TableLayoutPanel body = GlassBlock(2);
             body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             body.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            var words = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, BackColor = Theme.Surface, Margin = Padding.Empty, Dock = DockStyle.Fill };
+            body.Paint += PaintHairline;
+            var words = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, BackColor = Theme.Glass, Margin = Padding.Empty, Dock = DockStyle.Fill };
             words.Controls.Add(new Label
             {
-                Text = title, AutoSize = true, ForeColor = accent, BackColor = Theme.Surface, Font = Theme.Ui(10f, true),
-                UseMnemonic = false, Margin = Theme.Pad(0, 0, 0, 2)
+                Text = title, AutoSize = true, ForeColor = accent, BackColor = Theme.Glass, Font = Theme.Legend(10.5f, bold: true),
+                UseMnemonic = false, Margin = Theme.Pad(0, 0, 0, 3)
             });
             words.Controls.Add(new Label
             {
-                Text = text, AutoSize = true, ForeColor = Theme.Text, BackColor = Theme.Surface, UseMnemonic = false,
+                Text = text, AutoSize = true, ForeColor = Theme.Text, BackColor = Theme.Glass, UseMnemonic = false,
                 Margin = Padding.Empty, MaximumSize = new Size(BannerTextWidth(Theme.Dp(290)), 0)
             });
-            var button = new FlatButton
+            var button = new KeyButton
             {
                 Text = Loc.T(buttonKey), Kind = ButtonKind.Secondary, Anchor = AnchorStyles.Right, Margin = Theme.Pad(12, 0, 0, 0),
-                Size = new Size(TextRenderer.MeasureText(Loc.T(buttonKey), Theme.Ui(9.5f, true)).Width + Theme.Dp(32), Theme.Dp(32))
+                Size = new Size(TextRenderer.MeasureText(Loc.T(buttonKey), Theme.Legend(9.5f, bold: true)).Width + Theme.Dp(40), Theme.Dp(36))
             };
             button.Click += delegate { click(); };
             body.Controls.Add(words, 0, 0);
             body.Controls.Add(button, 1, 0);
-            card.Controls.Add(body);
-            return card;
+            return body;
         }
 
-        /// <summary>Things to know about this macro, one short line each, in a single card.</summary>
+        /// <summary>Things to know about this macro, one short line each.</summary>
         private Control NotesBanner(List<Tuple<string, Color>> notes)
         {
-            Card card = BannerCard();
-            var body = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1,
-                BackColor = Theme.Surface
-            };
+            TableLayoutPanel body = GlassBlock(1);
+            body.Paint += PaintHairline;
             for (int i = 0; i < notes.Count; i++)
                 body.Controls.Add(new Label
                 {
-                    Text = "\u2022  " + notes[i].Item1, AutoSize = true, ForeColor = notes[i].Item2, BackColor = Theme.Surface,
+                    Text = "•  " + notes[i].Item1, AutoSize = true, ForeColor = notes[i].Item2, BackColor = Theme.Glass,
                     Font = Theme.Ui(9f), UseMnemonic = false, Margin = Theme.Pad(0, 0, 0, i == notes.Count - 1 ? 0 : 4),
                     MaximumSize = new Size(BannerTextWidth(0), 0)
                 });
-            card.Controls.Add(body);
-            return card;
+            return body;
+        }
+
+        private static void PaintHairline(object sender, PaintEventArgs e)
+        {
+            var block = (Control)sender;
+            using (var pen = new Pen(Theme.Mix(Theme.Glass, Theme.Border, 0.9f))) e.Graphics.DrawLine(pen, 0, 0, block.Width, 0);
         }
 
         private void UpdateBanners()
@@ -661,20 +661,21 @@ namespace VClicker
 
         // ------------------------------------------------------------------ the step list
 
-        private static string Glyph(StepKind kind)
+        private static Glyph GlyphFor(MacroStep step)
         {
-            switch (kind)
+            switch (step.Kind)
             {
-                case StepKind.Click: case StepKind.DoubleClick: return "\U0001F5B1";
-                case StepKind.Drag: return "\u2725";
-                case StepKind.Hover: return "\u25CE";
-                case StepKind.Scroll: return "\u2195";
-                case StepKind.Type: return "\u270E";
-                case StepKind.Key: case StepKind.Shortcut: return "\u2328";
-                case StepKind.Wait: return "\u23F1";
-                case StepKind.WaitFor: return "\u23F3";
-                case StepKind.Password: return "\U0001F512";
-                default: return "?";
+                case StepKind.Click: return step.Target != null ? Glyph.Target : Glyph.Click;
+                case StepKind.DoubleClick: return step.Target != null ? Glyph.Target : Glyph.DoubleClick;
+                case StepKind.Drag: return Glyph.Drag;
+                case StepKind.Hover: return Glyph.Hover;
+                case StepKind.Scroll: return Glyph.Scroll;
+                case StepKind.Type: return Glyph.Type;
+                case StepKind.Key: case StepKind.Shortcut: return Glyph.Key;
+                case StepKind.Wait: return Glyph.Wait;
+                case StepKind.WaitFor: return Glyph.WaitFor;
+                case StepKind.Password: return Glyph.Lock;
+                default: return Glyph.Unknown;
             }
         }
 
@@ -683,26 +684,36 @@ namespace VClicker
             if (e.Index < 0 || e.Index >= macro.Steps.Count) return;
             MacroStep step = macro.Steps[e.Index];
             Graphics g = e.Graphics;
+            Theme.Smooth(g);
+            float k = Theme.Scale;
             bool selected = (e.State & DrawItemState.Selected) != 0;
             bool current = player.Phase != MacroPhase.Idle && player.StepIndex == e.Index;
-            using (var back = new SolidBrush(selected ? Theme.Mix(Theme.Surface, Theme.Accent, 0.28f) : Theme.Surface))
+            using (var back = new SolidBrush(Theme.Field))
                 g.FillRectangle(back, e.Bounds);
-            if (current)
-                using (var bar = new SolidBrush(Theme.Success))
-                    g.FillRectangle(bar, e.Bounds.Left, e.Bounds.Top + Theme.Dp(4), Theme.Dp(4), e.Bounds.Height - Theme.Dp(8));
+            if (selected)
+            {
+                // The selected step sits on a key-colored bar; the amber edge only when the list has the keyboard.
+                var bar = new RectangleF(e.Bounds.Left + k, e.Bounds.Top + k, e.Bounds.Width - 2 * k, e.Bounds.Height - 2 * k);
+                using (GraphicsPath path = Theme.RoundRect(bar, 5 * k))
+                using (var fill = new SolidBrush(Theme.Key))
+                    g.FillPath(fill, path);
+                if (list.Focused) Theme.DrawFocus(g, bar, 5 * k);
+            }
 
             Color color = step.Kind == StepKind.Password ? Theme.Warning
                         : step.Kind == StepKind.Unknown ? Theme.Danger
                         : step.Kind == StepKind.Wait ? Theme.Dim : Theme.Text;
             if (step.Kind == StepKind.Wait && step.DurationMs >= Macro.LongWaitMs) color = Theme.Warning;
-            int x = e.Bounds.Left + Theme.Dp(10);
-            var number = new Rectangle(x, e.Bounds.Top, Theme.Dp(34), e.Bounds.Height);
-            TextRenderer.DrawText(g, (e.Index + 1).ToString(CultureInfo.CurrentCulture) + ".", list.Font, number, Theme.Dim,
+            int x = e.Bounds.Left + Theme.Dp(8);
+            if (current) Theme.DrawLed(g, new PointF(x + 4 * k, e.Bounds.Top + e.Bounds.Height / 2f), 7 * k, Theme.Success, true);
+            var number = new Rectangle(x + Theme.Dp(8), e.Bounds.Top, Theme.Dp(28), e.Bounds.Height);
+            TextRenderer.DrawText(g, (e.Index + 1).ToString(CultureInfo.CurrentCulture), Theme.Legend(9.5f), number, Theme.Dim,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.Right | TextFormatFlags.NoPrefix);
-            var glyph = new Rectangle(number.Right + Theme.Dp(6), e.Bounds.Top, Theme.Dp(26), e.Bounds.Height);
-            TextRenderer.DrawText(g, Glyph(step.Kind), Theme.UiSymbol(11f), glyph, color,
-                TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix);
-            var text = new Rectangle(glyph.Right + Theme.Dp(6), e.Bounds.Top, e.Bounds.Right - glyph.Right - Theme.Dp(12), e.Bounds.Height);
+            float side = 16 * k;
+            var icon = new RectangleF(number.Right + 10 * k, e.Bounds.Top + (e.Bounds.Height - side) / 2, side, side);
+            Icons.Draw(g, GlyphFor(step), icon, color);
+            int textLeft = (int)(icon.Right + 10 * k);
+            var text = new Rectangle(textLeft, e.Bounds.Top, e.Bounds.Right - textLeft - Theme.Dp(10), e.Bounds.Height);
             TextRenderer.DrawText(g, step.Describe(), list.Font, text, color,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix |
                 TextFormatFlags.EndEllipsis);
@@ -741,7 +752,7 @@ namespace VClicker
             var body = new TableLayoutPanel
             {
                 Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2,
-                BackColor = Theme.Surface, Padding = Theme.Pad(0, 0, 4, 0)
+                BackColor = Theme.Bg, Padding = Theme.Pad(0, 0, 4, 0)
             };
             body.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -756,13 +767,14 @@ namespace VClicker
             }
             MacroStep step = macro.Steps[index];
             bool editable = !Busy;
-            Full(body, Note(Loc.F("studio.detail", index + 1), Theme.Dim, 8.5f, true));
-            detailTitle = Note(step.Describe(), Theme.Text, 10f, true);
+            detailTitle = Note(StepTitle(index), Theme.Text, 10f, true);
+            detailTitle.Margin = Theme.Pad(0, 2, 0, 12);
+            detailTitle.MaximumSize = new Size(Math.Max(Theme.Dp(220), detail.ClientSize.Width - Theme.Dp(28)), 0); // the panel width, so a title wraps once, not word by word
             Full(body, detailTitle);
 
             if (step.Kind == StepKind.Click || step.Kind == StepKind.DoubleClick || step.Kind == StepKind.Drag)
             {
-                var button = new Segmented { Items = new[] { Loc.T("step.left"), Loc.T("step.middle"), Loc.T("step.right") }, Size = Theme.Sz(220, 30) };
+                var button = new Segmented { Items = new[] { Loc.T("step.left"), Loc.T("step.middle"), Loc.T("step.right") }, Size = Theme.Sz(220, 36) };
                 button.SelectedIndex = (int)step.Button;
                 button.SelectedChanged += delegate { Edit(() => step.Button = (ClickButton)button.SelectedIndex, false); };
                 button.Enabled = editable;
@@ -788,16 +800,16 @@ namespace VClicker
                     };
                     Pair(body, "studio.notches", notches);
                 }
-                var capture = new FlatButton { Text = Loc.T("studio.capture"), Kind = ButtonKind.Secondary, Size = Theme.Sz(170, 30), Margin = Theme.Pad(0, 4, 0, 8) };
+                var capture = new KeyButton { Text = Loc.T("studio.capture"), Kind = ButtonKind.Secondary, Size = Theme.Sz(170, 36), Margin = Theme.Pad(0, 4, 0, 8) };
                 capture.Enabled = editable && macro.ExeName.Length > 0;
                 capture.Click += delegate { BeginCapture(index); };
                 Full(body, capture);
                 Full(body, Note(Loc.T("studio.relative"), Theme.Dim, 8.5f));
                 if (step.Kind == StepKind.Click || step.Kind == StepKind.DoubleClick)
                 {
-                    var smart = new FlatButton
+                    var smart = new KeyButton
                     {
-                        Text = Loc.T("studio.toTarget"), Kind = ButtonKind.Secondary, Size = Theme.Sz(220, 30),
+                        Text = Loc.T("studio.toTarget"), Kind = ButtonKind.Secondary, Size = Theme.Sz(220, 36),
                         Enabled = editable && macro.ExeName.Length > 0, Margin = Theme.Pad(0, 4, 0, 4)
                     };
                     smart.Click += delegate { BeginCapture(index, CaptureFor.Target); };
@@ -808,11 +820,10 @@ namespace VClicker
             switch (step.Kind)
             {
                 case StepKind.Type:
-                    var text = new TextBox
-                    {
-                        Text = step.Text, BackColor = Theme.Field, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle,
-                        Font = Theme.Ui(10f), Width = Theme.Dp(240), ReadOnly = !editable, Margin = Theme.Pad(0, 0, 0, 8)
-                    };
+                    var textField = new TextField { Width = Theme.Dp(240) };
+                    TextBox text = textField.Box;
+                    text.Text = step.Text;
+                    text.ReadOnly = !editable;
                     text.AccessibleName = Loc.T("studio.text");
                     void CommitText()
                     {
@@ -822,7 +833,7 @@ namespace VClicker
                     text.Leave += delegate { CommitText(); };
                     detailCommits.Add(CommitText);
                     text.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { CommitText(); e.SuppressKeyPress = true; } };
-                    Pair(body, "studio.text", text);
+                    Pair(body, "studio.text", textField);
                     break;
                 case StepKind.Key:
                     NumberField count = Field(1, MacroStep.MaxCount, step.Count, editable);
@@ -841,17 +852,17 @@ namespace VClicker
                     Pair(body, "studio.seconds", seconds);
                     if (step.IsShortened)
                     {
-                        var restore = new FlatButton
+                        var restore = new KeyButton
                         {
                             Text = Loc.F("studio.restore", MacroStep.Seconds(step.RecordedMs)), Kind = ButtonKind.Secondary,
-                            Size = Theme.Sz(170, 30), Enabled = editable, Margin = Theme.Pad(0, 4, 0, 8)
+                            Size = Theme.Sz(170, 36), Enabled = editable, Margin = Theme.Pad(0, 4, 0, 8)
                         };
                         restore.Click += delegate { RestoreWait(index); };
                         Full(body, restore);
                     }
-                    var convert = new FlatButton
+                    var convert = new KeyButton
                     {
-                        Text = Loc.T("studio.toCondition"), Kind = ButtonKind.Secondary, Size = Theme.Sz(220, 30),
+                        Text = Loc.T("studio.toCondition"), Kind = ButtonKind.Secondary, Size = Theme.Sz(220, 36),
                         Enabled = editable && macro.ExeName.Length > 0, Margin = Theme.Pad(0, 4, 0, 4)
                     };
                     convert.Click += delegate { BeginCapture(index, CaptureFor.Convert); };
@@ -863,19 +874,19 @@ namespace VClicker
                     limit.Unit = "s";
                     limit.ValueChanged += delegate { Edit(() => step.DurationMs = limit.Value * 1000, false); };
                     Pair(body, "studio.timeout", limit);
-                    var repoint = new FlatButton
+                    var repoint = new KeyButton
                     {
-                        Text = Loc.T("studio.repoint"), Kind = ButtonKind.Secondary, Size = Theme.Sz(170, 30),
+                        Text = Loc.T("studio.repoint"), Kind = ButtonKind.Secondary, Size = Theme.Sz(170, 36),
                         Enabled = editable, Margin = Theme.Pad(0, 4, 0, 4)
                     };
                     repoint.Click += delegate { BeginCapture(index, CaptureFor.Repoint); };
                     Full(body, repoint);
                     if (step.Reverts)
                     {
-                        var back = new FlatButton
+                        var back = new KeyButton
                         {
                             Text = Loc.F("studio.backToWait", MacroStep.Seconds(step.WasMs)), Kind = ButtonKind.Secondary,
-                            Size = Theme.Sz(220, 30), Enabled = editable, Margin = Theme.Pad(0, 4, 0, 4)
+                            Size = Theme.Sz(220, 36), Enabled = editable, Margin = Theme.Pad(0, 4, 0, 4)
                         };
                         back.Click += delegate { RevertCondition(index); };
                         Full(body, back);
@@ -906,16 +917,16 @@ namespace VClicker
             limit.Unit = "s";
             limit.ValueChanged += delegate { Edit(() => step.Target.TimeoutMs = limit.Value * 1000, false); };
             Pair(body, "studio.timeout", limit); // the short label: the detail panel is narrow
-            var repoint = new FlatButton
+            var repoint = new KeyButton
             {
-                Text = Loc.T("studio.repoint"), Kind = ButtonKind.Secondary, Size = Theme.Sz(170, 30),
+                Text = Loc.T("studio.repoint"), Kind = ButtonKind.Secondary, Size = Theme.Sz(170, 36),
                 Enabled = editable && macro.ExeName.Length > 0, Margin = Theme.Pad(0, 4, 0, 4)
             };
             repoint.Click += delegate { BeginCapture(index, CaptureFor.Retarget); };
             Full(body, repoint);
-            var back = new FlatButton
+            var back = new KeyButton
             {
-                Text = Loc.F("studio.backToPoint", step.At.X, step.At.Y), Kind = ButtonKind.Secondary, Size = Theme.Sz(240, 30),
+                Text = Loc.F("studio.backToPoint", step.At.X, step.At.Y), Kind = ButtonKind.Secondary, Size = Theme.Sz(240, 36),
                 Enabled = editable, Margin = Theme.Pad(0, 4, 0, 4)
             };
             back.Click += delegate { RevertTarget(index); };
@@ -923,8 +934,15 @@ namespace VClicker
             Full(body, Note(Loc.F(step.Target.Kind == TargetKind.Image ? "studio.targetImageInfo" : "studio.targetInfo", step.At.X, step.At.Y), Theme.Dim, 8.5f));
         }
 
+        /// <summary>"6. Clicar (esquerdo) em 812, 440": the step's number as in the list, then the step.</summary>
+        private string StepTitle(int index) =>
+            (index + 1).ToString(CultureInfo.CurrentCulture) + ".  " + macro.Steps[index].Describe();
+
         private static void Full(TableLayoutPanel body, Control control)
         {
+            // Action keys in the detail panel are as wide as their legend needs.
+            if (control is KeyButton key)
+                key.Width = Math.Max(key.Width, TextRenderer.MeasureText(key.Text, key.Font).Width + Theme.Dp(44));
             body.Controls.Add(control);
             body.SetColumnSpan(control, 2);
         }
@@ -933,7 +951,7 @@ namespace VClicker
         {
             var label = new Label
             {
-                Text = key.Length <= 2 ? key : Loc.T(key), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Surface,
+                Text = key.Length <= 2 ? key : Loc.T(key), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Font = Theme.Legend(9.75f),
                 Anchor = AnchorStyles.Left, Margin = Theme.Pad(0, 0, 10, 8), UseMnemonic = false
             };
             field.Margin = Theme.Pad(0, 0, 0, 8);
@@ -943,7 +961,7 @@ namespace VClicker
 
         private NumberField Field(double min, double max, double value, bool editable)
         {
-            var field = new NumberField { Minimum = min, Maximum = max, Size = Theme.Sz(110, 30), Enabled = editable };
+            var field = new NumberField { Minimum = min, Maximum = max, Size = Theme.Sz(110, 36), Enabled = editable };
             field.Number = value;
             detailCommits.Add(field.Commit);
             return field;
@@ -970,7 +988,7 @@ namespace VClicker
             RefreshList();
             UpdateBanners();
             if (rebuildDetail) ShowDetail();
-            else if (detailTitle != null && !detailTitle.IsDisposed && list.SelectedIndex >= 0) detailTitle.Text = macro.Steps[list.SelectedIndex].Describe();
+            else if (detailTitle != null && !detailTitle.IsDisposed && list.SelectedIndex >= 0) detailTitle.Text = StepTitle(list.SelectedIndex);
             UpdateEnabled();
             UpdateTitle();
         }
@@ -1244,7 +1262,7 @@ namespace VClicker
                 Open(new Macro(), null);
                 return;
             }
-            if (Dialogs.Ask(this, Loc.F("ask.delete", DisplayName), Loc.T("studio.delete"), Loc.T("ask.cancel")) != 0) return;
+            if (Dialogs.Ask(this, Loc.F("ask.delete", DisplayName), ButtonKind.Danger, Loc.T("studio.delete"), Loc.T("ask.cancel")) != 0) return;
             try
             {
                 FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
@@ -1646,6 +1664,7 @@ namespace VClicker
         {
             bool active = Busy || captureIndex >= 0;
             status.Dot = active ? StateDot() : messageColor == Theme.Dim ? Theme.Dim : messageColor;
+            bRecord.LedLit = recorder != null && !recorder.Paused; // the red lamp is on while it records
             status.Text = active ? StateText() : Loc.T("mstatus.ready");
             Size preferred = status.GetPreferredSize(Size.Empty);
             status.Size = new Size(Math.Min(preferred.Width, Theme.Dp(520)), preferred.Height);
@@ -1661,6 +1680,7 @@ namespace VClicker
             bool idle = !busy && captureIndex < 0;
             int index = list.SelectedIndex;
             bRecord.Enabled = bRun.Enabled = idle;
+            bStop.SubLegend = settings.StopKey.ToString();
             bStop.Enabled = busy || captureIndex >= 0;
             bNew.Enabled = bRename.Enabled = bDelete.Enabled = bSave.Enabled = macroList.Enabled = idle;
             fRepeat.Enabled = idle && !chkForever.Checked;
@@ -1717,15 +1737,12 @@ namespace VClicker
             return base.ProcessCmdKey(ref msg, keyData);
         }
 
-        [System.Runtime.InteropServices.DllImport("uxtheme.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
-        private static extern int SetWindowTheme(IntPtr window, string app, string idList);
-
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
             // Dark scroll bars (Windows 10 1809+; elsewhere the call changes nothing).
-            SetWindowTheme(list.Handle, "DarkMode_Explorer", null);
-            SetWindowTheme(detail.Handle, "DarkMode_Explorer", null);
+            Native.SetWindowTheme(list.Handle, "DarkMode_Explorer", null);
+            Native.SetWindowTheme(detail.Handle, "DarkMode_Explorer", null);
             Native.StyleTitleBar(Handle, MainForm.ColorRef(Theme.Bg), MainForm.ColorRef(Theme.Text), MainForm.ColorRef(Theme.Border));
         }
 
@@ -1798,8 +1815,8 @@ namespace VClicker
                     Text = text, AutoSize = true, ForeColor = color, BackColor = Theme.Bg, UseMnemonic = false,
                     MaximumSize = new Size(Theme.Dp(440), 0), Margin = Theme.Pad(0, 0, 0, bottom)
                 };
-                var ok = new FlatButton { Text = Loc.T("cond.confirm"), Kind = ButtonKind.Primary, Size = Theme.Sz(120, 32) };
-                var cancel = new FlatButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 32), Margin = Theme.Pad(0, 0, 8, 0) };
+                var ok = new KeyButton { Text = Loc.T("cond.confirm"), Kind = ButtonKind.Primary, Size = Theme.Sz(120, 36) };
+                var cancel = new KeyButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 36), Margin = Theme.Pad(0, 0, 8, 0) };
                 cancel.Click += delegate { DialogResult = DialogResult.Cancel; };
 
                 if (kinds.Count == 0)
@@ -1812,9 +1829,10 @@ namespace VClicker
                     body.Controls.Add(Line(Loc.T("cond.intro"), Theme.Dim));
                     var choice = new Segmented
                     {
-                        Items = kinds.Select(k => Loc.T("cond.kind." + k)).ToArray(), Size = Theme.Sz(330, 30), Margin = Theme.Pad(0, 0, 0, 10)
+                        Items = kinds.Select(k => Loc.T("cond.kind." + k)).ToArray(), Height = Theme.Dp(36), Dock = DockStyle.Fill, Margin = Theme.Pad(0, 0, 0, 10)
                     };
                     choice.SelectedIndex = kinds.IndexOf(preferred);
+                    choice.Visible = kinds.Count > 1; // a single kind is already named by the line below
                     body.Controls.Add(choice);
                     var found = (Label)Line(string.Empty, Theme.Text, 4);
                     found.Font = Theme.Ui(10f, true);
@@ -1853,11 +1871,11 @@ namespace VClicker
                     var limitRow = new FlowLayoutPanel { AutoSize = true, BackColor = Theme.Bg, Margin = Theme.Pad(0, 10, 0, 0), WrapContents = false };
                     limitRow.Controls.Add(new Label
                     {
-                        Text = Loc.T("studio.timeout"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Margin = Theme.Pad(0, 8, 10, 0)
+                        Text = Loc.T("studio.timeout"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Margin = Theme.Pad(0, 10, 10, 0)
                     });
                     var limit = new NumberField
                     {
-                        Minimum = MacroStep.MinTimeoutMs / 1000, Maximum = MacroStep.MaxTimeoutMs / 1000, Size = Theme.Sz(90, 30), Unit = "s"
+                        Minimum = MacroStep.MinTimeoutMs / 1000, Maximum = MacroStep.MaxTimeoutMs / 1000, Size = Theme.Sz(90, 36), Unit = "s"
                     };
                     limit.Number = timeoutMs / 1000;
                     limitRow.Controls.Add(limit);
@@ -1927,8 +1945,8 @@ namespace VClicker
                     Text = text, AutoSize = true, ForeColor = color, BackColor = Theme.Bg, UseMnemonic = false,
                     MaximumSize = new Size(Theme.Dp(440), 0), Margin = Theme.Pad(0, 0, 0, bottom)
                 };
-                var ok = new FlatButton { Text = Loc.T("cond.confirm"), Kind = ButtonKind.Primary, Size = Theme.Sz(120, 32) };
-                var cancel = new FlatButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 32), Margin = Theme.Pad(0, 0, 8, 0) };
+                var ok = new KeyButton { Text = Loc.T("cond.confirm"), Kind = ButtonKind.Primary, Size = Theme.Sz(120, 36) };
+                var cancel = new KeyButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 36), Margin = Theme.Pad(0, 0, 8, 0) };
                 cancel.Click += delegate { DialogResult = DialogResult.Cancel; };
 
                 bool byName = probe.ElementUsable;
@@ -1946,20 +1964,23 @@ namespace VClicker
                 }
                 else
                 {
-                    var choice = new Segmented { Items = new[] { Loc.T("target.byName"), Loc.T("target.byLook") }, Size = Theme.Sz(300, 30), Margin = Theme.Pad(0, 0, 0, 10) };
+                    var choice = new Segmented { Items = new[] { Loc.T("target.byName"), Loc.T("target.byLook") }, Height = Theme.Dp(36), Dock = DockStyle.Fill, Margin = Theme.Pad(0, 0, 0, 10) };
                     choice.SelectedIndex = byName ? 0 : 1;
                     var found = Line(string.Empty, Theme.Text, 6);
                     found.Font = Theme.Ui(10f, true);
-                    var view = new PixelView { Size = Theme.Sz(240, 110), Margin = Theme.Pad(0, 0, 0, 8), BackColor = Theme.Field };
+                    var view = new PixelView { Height = Theme.Dp(110), Dock = DockStyle.Fill, Margin = Theme.Pad(0, 0, 0, 8), BackColor = Theme.Field };
                     var verdict = Line(string.Empty, Theme.Success, 6);
-                    var sizeRow = new FlowLayoutPanel { AutoSize = true, BackColor = Theme.Bg, WrapContents = false, Margin = Theme.Pad(0, 0, 0, 6) };
+                    // Label, then the size keys out to the dialog's right edge (the same edge as the preview and the keys).
+                    var sizeRow = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Dock = DockStyle.Fill, BackColor = Theme.Bg, Margin = Theme.Pad(0, 0, 0, 6) };
+                    sizeRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+                    sizeRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
                     sizeRow.Controls.Add(new Label
                     {
-                        Text = Loc.T("target.size"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Margin = Theme.Pad(0, 8, 10, 0)
+                        Text = Loc.T("target.size"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Anchor = AnchorStyles.Left, Margin = Theme.Pad(0, 0, 10, 0)
                     });
                     var size = new Segmented
                     {
-                        Items = sizes.Select(o => Loc.T("target.side" + o.Side)).ToArray(), Size = Theme.Sz(80 * Math.Max(1, sizes.Count), 30)
+                        Items = sizes.Select(o => Loc.T("target.side" + o.Side)).ToArray(), Height = Theme.Dp(36), Dock = DockStyle.Fill, Margin = Padding.Empty
                     };
                     if (image != null) size.SelectedIndex = sizes.IndexOf(image);
                     sizeRow.Controls.Add(size);
@@ -2011,11 +2032,11 @@ namespace VClicker
                     var limitRow = new FlowLayoutPanel { AutoSize = true, BackColor = Theme.Bg, Margin = Theme.Pad(0, 10, 0, 0), WrapContents = false };
                     limitRow.Controls.Add(new Label
                     {
-                        Text = Loc.T("studio.findTimeout"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Margin = Theme.Pad(0, 8, 10, 0)
+                        Text = Loc.T("studio.findTimeout"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Margin = Theme.Pad(0, 10, 10, 0)
                     });
                     var limit = new NumberField
                     {
-                        Minimum = MacroStep.MinTimeoutMs / 1000, Maximum = MacroStep.MaxTimeoutMs / 1000, Size = Theme.Sz(90, 30), Unit = "s"
+                        Minimum = MacroStep.MinTimeoutMs / 1000, Maximum = MacroStep.MaxTimeoutMs / 1000, Size = Theme.Sz(90, 36), Unit = "s"
                     };
                     limit.Number = timeoutMs / 1000;
                     limitRow.Controls.Add(limit);
@@ -2115,15 +2136,15 @@ namespace VClicker
                 };
                 body.Controls.Add(intro);
                 body.SetColumnSpan(intro, 2);
-                var rows = new List<Tuple<int, DarkCheck, NumberField>>();
+                var rows = new List<Tuple<int, LedCheck, NumberField>>();
                 foreach (int index in waits)
                 {
-                    var check = new DarkCheck
+                    var check = new LedCheck
                     {
                         Text = Loc.F("opt.row", index + 1, MacroStep.Seconds(macro.Steps[index].DurationMs)),
                         BackColor = Theme.Bg, Margin = Theme.Pad(0, 4, 16, 6)
                     };
-                    var value = new NumberField { Minimum = 0, Maximum = MacroStep.MaxWaitMs / 1000, Decimals = 1, Size = Theme.Sz(90, 30), Unit = "s" };
+                    var value = new NumberField { Minimum = 0, Maximum = MacroStep.MaxWaitMs / 1000, Decimals = 1, Size = Theme.Sz(90, 36), Unit = "s" };
                     value.Number = 1;
                     value.Enabled = false;
                     check.CheckedChanged += delegate { value.Enabled = check.Checked; };
@@ -2136,11 +2157,11 @@ namespace VClicker
                     FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, BackColor = Theme.Bg,
                     Margin = Theme.Pad(0, 14, 0, 0)
                 };
-                var apply = new FlatButton { Text = Loc.T("opt.apply"), Kind = ButtonKind.Primary, Size = Theme.Sz(110, 32) };
-                var cancel = new FlatButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 32), Margin = Theme.Pad(0, 0, 8, 0) };
+                var apply = new KeyButton { Text = Loc.T("opt.apply"), Kind = ButtonKind.Primary, Size = Theme.Sz(110, 36) };
+                var cancel = new KeyButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 36), Margin = Theme.Pad(0, 0, 8, 0) };
                 apply.Click += delegate
                 {
-                    foreach (Tuple<int, DarkCheck, NumberField> row in rows)
+                    foreach (Tuple<int, LedCheck, NumberField> row in rows)
                         if (row.Item2.Checked) Result[row.Item1] = (int)Math.Round(row.Item3.Number * 1000);
                     DialogResult = DialogResult.OK;
                 };
@@ -2178,7 +2199,10 @@ namespace VClicker
         }
 
         /// <returns>The index of the button pressed; -1 if the dialog was closed (or Esc).</returns>
-        public static int Ask(IWin32Window owner, string text, params string[] buttons)
+        public static int Ask(IWin32Window owner, string text, params string[] buttons) => Ask(owner, text, ButtonKind.Primary, buttons);
+
+        /// <param name="first">The first button's key: the coral one when it destroys something.</param>
+        public static int Ask(IWin32Window owner, string text, ButtonKind first, params string[] buttons)
         {
             using (var form = new Form { Text = "V-Clicker" })
             {
@@ -2194,9 +2218,9 @@ namespace VClicker
                 for (int i = 0; i < buttons.Length; i++)
                 {
                     int index = i;
-                    var button = new FlatButton
+                    var button = new KeyButton
                     {
-                        Text = buttons[i], Kind = i == 0 ? ButtonKind.Primary : ButtonKind.Secondary,
+                        Text = buttons[i], Kind = i == 0 ? first : ButtonKind.Secondary,
                         Size = new Size(Math.Max(Theme.Dp(100), TextRenderer.MeasureText(buttons[i], Theme.Ui(9.5f, true)).Width + Theme.Dp(28)), Theme.Dp(32)),
                         Margin = Theme.Pad(8, 0, 0, 0)
                     };
@@ -2220,16 +2244,15 @@ namespace VClicker
                 string result = null;
                 var body = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, Dock = DockStyle.Fill, BackColor = Theme.Bg };
                 body.Controls.Add(new Label { Text = label, AutoSize = true, BackColor = Theme.Bg, ForeColor = Theme.Dim, UseMnemonic = false });
-                var box = new TextBox
-                {
-                    Text = initial ?? string.Empty, Width = Theme.Dp(360), BackColor = Theme.Field, ForeColor = Theme.Text,
-                    BorderStyle = BorderStyle.FixedSingle, Font = Theme.Ui(10.5f), Margin = Theme.Pad(0, 6, 0, 16), MaxLength = 80
-                };
+                var field = new TextField { Width = Theme.Dp(360), Margin = Theme.Pad(0, 8, 0, 18) };
+                TextBox box = field.Box;
+                box.Text = initial ?? string.Empty;
+                box.MaxLength = 80;
                 box.AccessibleName = label;
-                body.Controls.Add(box);
+                body.Controls.Add(field);
                 var row = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, BackColor = Theme.Bg };
-                var ok = new FlatButton { Text = Loc.T("ask.ok"), Kind = ButtonKind.Primary, Size = Theme.Sz(100, 32), Margin = Theme.Pad(8, 0, 0, 0) };
-                var cancel = new FlatButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(100, 32), Margin = Theme.Pad(8, 0, 0, 0) };
+                var ok = new KeyButton { Text = Loc.T("ask.ok"), Kind = ButtonKind.Primary, Size = Theme.Sz(100, 36), Margin = Theme.Pad(8, 0, 0, 0) };
+                var cancel = new KeyButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(100, 36), Margin = Theme.Pad(8, 0, 0, 0) };
                 ok.Click += delegate { result = box.Text; form.Close(); };
                 cancel.Click += delegate { form.Close(); };
                 row.Controls.Add(ok);

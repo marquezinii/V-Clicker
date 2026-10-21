@@ -1,0 +1,587 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-21T22:45:16+00:00",
+  "title": "Design System: V-Clicker",
+  "extensions": {
+    "colorMeta": {
+      "amber": {
+        "role": "primary",
+        "displayName": "Accent Amber",
+        "canonical": "#F5C542",
+        "oklch": "oklch(84.4% 0.151 88)",
+        "tonalRamp": [
+          "oklch(15% 0.151 88)",
+          "oklch(26% 0.151 88)",
+          "oklch(38% 0.151 88)",
+          "oklch(49% 0.151 88)",
+          "oklch(61% 0.151 88)",
+          "oklch(72% 0.151 88)",
+          "oklch(84% 0.151 88)",
+          "oklch(95% 0.151 88)"
+        ]
+      },
+      "amber-skirt": {
+        "role": "primary",
+        "displayName": "Amber Skirt",
+        "canonical": "#BF952A",
+        "oklch": "oklch(69.1% 0.128 86)",
+        "tonalRamp": [
+          "oklch(15% 0.128 86)",
+          "oklch(26% 0.128 86)",
+          "oklch(38% 0.128 86)",
+          "oklch(49% 0.128 86)",
+          "oklch(61% 0.128 86)",
+          "oklch(72% 0.128 86)",
+          "oklch(84% 0.128 86)",
+          "oklch(95% 0.128 86)"
+        ]
+      },
+      "coral": {
+        "role": "secondary",
+        "displayName": "Stop Coral",
+        "canonical": "#F0645A",
+        "oklch": "oklch(67.8% 0.175 27)",
+        "tonalRamp": [
+          "oklch(15% 0.175 27)",
+          "oklch(26% 0.175 27)",
+          "oklch(38% 0.175 27)",
+          "oklch(49% 0.175 27)",
+          "oklch(61% 0.175 27)",
+          "oklch(72% 0.175 27)",
+          "oklch(84% 0.175 27)",
+          "oklch(95% 0.175 27)"
+        ]
+      },
+      "coral-skirt": {
+        "role": "secondary",
+        "displayName": "Coral Skirt",
+        "canonical": "#B9483F",
+        "oklch": "oklch(55.2% 0.148 27)",
+        "tonalRamp": [
+          "oklch(15% 0.148 27)",
+          "oklch(26% 0.148 27)",
+          "oklch(38% 0.148 27)",
+          "oklch(49% 0.148 27)",
+          "oklch(61% 0.148 27)",
+          "oklch(72% 0.148 27)",
+          "oklch(84% 0.148 27)",
+          "oklch(95% 0.148 27)"
+        ]
+      },
+      "lamp-green": {
+        "role": "tertiary",
+        "displayName": "Lamp Green",
+        "canonical": "#5FE08C",
+        "oklch": "oklch(81.4% 0.165 152)",
+        "tonalRamp": [
+          "oklch(15% 0.165 152)",
+          "oklch(26% 0.165 152)",
+          "oklch(38% 0.165 152)",
+          "oklch(49% 0.165 152)",
+          "oklch(61% 0.165 152)",
+          "oklch(72% 0.165 152)",
+          "oklch(84% 0.165 152)",
+          "oklch(95% 0.165 152)"
+        ]
+      },
+      "lamp-orange": {
+        "role": "tertiary",
+        "displayName": "Lamp Orange",
+        "canonical": "#FFA53D",
+        "oklch": "oklch(79.5% 0.155 65)",
+        "tonalRamp": [
+          "oklch(15% 0.155 65)",
+          "oklch(26% 0.155 65)",
+          "oklch(38% 0.155 65)",
+          "oklch(49% 0.155 65)",
+          "oklch(61% 0.155 65)",
+          "oklch(72% 0.155 65)",
+          "oklch(84% 0.155 65)",
+          "oklch(95% 0.155 65)"
+        ]
+      },
+      "lamp-red": {
+        "role": "tertiary",
+        "displayName": "Lamp Red",
+        "canonical": "#FF6A5C",
+        "oklch": "oklch(70.8% 0.185 28)",
+        "tonalRamp": [
+          "oklch(15% 0.185 28)",
+          "oklch(26% 0.185 28)",
+          "oklch(38% 0.185 28)",
+          "oklch(49% 0.185 28)",
+          "oklch(61% 0.185 28)",
+          "oklch(72% 0.185 28)",
+          "oklch(84% 0.185 28)",
+          "oklch(95% 0.185 28)"
+        ]
+      },
+      "plate": {
+        "role": "neutral",
+        "displayName": "Graphite Plate",
+        "canonical": "#1A1B1F",
+        "oklch": "oklch(22.3% 0.008 275)",
+        "tonalRamp": [
+          "oklch(15% 0.008 275)",
+          "oklch(26% 0.008 275)",
+          "oklch(38% 0.008 275)",
+          "oklch(49% 0.008 275)",
+          "oklch(61% 0.008 275)",
+          "oklch(72% 0.008 275)",
+          "oklch(84% 0.008 275)",
+          "oklch(95% 0.008 275)"
+        ]
+      },
+      "well": {
+        "role": "neutral",
+        "displayName": "Well Black",
+        "canonical": "#111215",
+        "oklch": "oklch(18.2% 0.006 271)",
+        "tonalRamp": [
+          "oklch(15% 0.006 271)",
+          "oklch(26% 0.006 271)",
+          "oklch(38% 0.006 271)",
+          "oklch(49% 0.006 271)",
+          "oklch(61% 0.006 271)",
+          "oklch(72% 0.006 271)",
+          "oklch(84% 0.006 271)",
+          "oklch(95% 0.006 271)"
+        ]
+      },
+      "glass": {
+        "role": "neutral",
+        "displayName": "OLED Glass",
+        "canonical": "#0B0C0E",
+        "oklch": "oklch(15.4% 0.005 264)",
+        "tonalRamp": [
+          "oklch(15% 0.005 264)",
+          "oklch(26% 0.005 264)",
+          "oklch(38% 0.005 264)",
+          "oklch(49% 0.005 264)",
+          "oklch(61% 0.005 264)",
+          "oklch(72% 0.005 264)",
+          "oklch(84% 0.005 264)",
+          "oklch(95% 0.005 264)"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#2D2F35",
+        "oklch": "oklch(30.6% 0.011 271)",
+        "tonalRamp": [
+          "oklch(15% 0.011 271)",
+          "oklch(26% 0.011 271)",
+          "oklch(38% 0.011 271)",
+          "oklch(49% 0.011 271)",
+          "oklch(61% 0.011 271)",
+          "oklch(72% 0.011 271)",
+          "oklch(84% 0.011 271)",
+          "oklch(95% 0.011 271)"
+        ]
+      },
+      "alpha-key": {
+        "role": "neutral",
+        "displayName": "Graphite Alpha Key",
+        "canonical": "#33353C",
+        "oklch": "oklch(33.0% 0.013 273)",
+        "tonalRamp": [
+          "oklch(15% 0.013 273)",
+          "oklch(26% 0.013 273)",
+          "oklch(38% 0.013 273)",
+          "oklch(49% 0.013 273)",
+          "oklch(61% 0.013 273)",
+          "oklch(72% 0.013 273)",
+          "oklch(84% 0.013 273)",
+          "oklch(95% 0.013 273)"
+        ]
+      },
+      "alpha-skirt": {
+        "role": "neutral",
+        "displayName": "Alpha Skirt",
+        "canonical": "#16171A",
+        "oklch": "oklch(20.5% 0.006 271)",
+        "tonalRamp": [
+          "oklch(15% 0.006 271)",
+          "oklch(26% 0.006 271)",
+          "oklch(38% 0.006 271)",
+          "oklch(49% 0.006 271)",
+          "oklch(61% 0.006 271)",
+          "oklch(72% 0.006 271)",
+          "oklch(84% 0.006 271)",
+          "oklch(95% 0.006 271)"
+        ]
+      },
+      "mod-key": {
+        "role": "neutral",
+        "displayName": "Grey Mod Key",
+        "canonical": "#4B4E57",
+        "oklch": "oklch(42.4% 0.015 271)",
+        "tonalRamp": [
+          "oklch(15% 0.015 271)",
+          "oklch(26% 0.015 271)",
+          "oklch(38% 0.015 271)",
+          "oklch(49% 0.015 271)",
+          "oklch(61% 0.015 271)",
+          "oklch(72% 0.015 271)",
+          "oklch(84% 0.015 271)",
+          "oklch(95% 0.015 271)"
+        ]
+      },
+      "mod-skirt": {
+        "role": "neutral",
+        "displayName": "Mod Skirt",
+        "canonical": "#26282D",
+        "oklch": "oklch(27.7% 0.010 268)",
+        "tonalRamp": [
+          "oklch(15% 0.010 268)",
+          "oklch(26% 0.010 268)",
+          "oklch(38% 0.010 268)",
+          "oklch(49% 0.010 268)",
+          "oklch(61% 0.010 268)",
+          "oklch(72% 0.010 268)",
+          "oklch(84% 0.010 268)",
+          "oklch(95% 0.010 268)"
+        ]
+      },
+      "light-cap": {
+        "role": "neutral",
+        "displayName": "Light Cap",
+        "canonical": "#E7E2D6",
+        "oklch": "oklch(91.3% 0.017 88)",
+        "tonalRamp": [
+          "oklch(15% 0.017 88)",
+          "oklch(26% 0.017 88)",
+          "oklch(38% 0.017 88)",
+          "oklch(49% 0.017 88)",
+          "oklch(61% 0.017 88)",
+          "oklch(72% 0.017 88)",
+          "oklch(84% 0.017 88)",
+          "oklch(95% 0.017 88)"
+        ]
+      },
+      "light-cap-skirt": {
+        "role": "neutral",
+        "displayName": "Light Cap Skirt",
+        "canonical": "#B3AC9C",
+        "oklch": "oklch(74.6% 0.024 87)",
+        "tonalRamp": [
+          "oklch(15% 0.024 87)",
+          "oklch(26% 0.024 87)",
+          "oklch(38% 0.024 87)",
+          "oklch(49% 0.024 87)",
+          "oklch(61% 0.024 87)",
+          "oklch(72% 0.024 87)",
+          "oklch(84% 0.024 87)",
+          "oklch(95% 0.024 87)"
+        ]
+      },
+      "legend": {
+        "role": "neutral",
+        "displayName": "Off-White Legend",
+        "canonical": "#ECE8DF",
+        "oklch": "oklch(93.2% 0.013 87)",
+        "tonalRamp": [
+          "oklch(15% 0.013 87)",
+          "oklch(26% 0.013 87)",
+          "oklch(38% 0.013 87)",
+          "oklch(49% 0.013 87)",
+          "oklch(61% 0.013 87)",
+          "oklch(72% 0.013 87)",
+          "oklch(84% 0.013 87)",
+          "oklch(95% 0.013 87)"
+        ]
+      },
+      "legend-dim": {
+        "role": "neutral",
+        "displayName": "Dim Legend",
+        "canonical": "#A3A19A",
+        "oklch": "oklch(70.9% 0.010 94)",
+        "tonalRamp": [
+          "oklch(15% 0.010 94)",
+          "oklch(26% 0.010 94)",
+          "oklch(38% 0.010 94)",
+          "oklch(49% 0.010 94)",
+          "oklch(61% 0.010 94)",
+          "oklch(72% 0.010 94)",
+          "oklch(84% 0.010 94)",
+          "oklch(95% 0.010 94)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#17181B",
+        "oklch": "oklch(20.9% 0.006 271)",
+        "tonalRamp": [
+          "oklch(15% 0.006 271)",
+          "oklch(26% 0.006 271)",
+          "oklch(38% 0.006 271)",
+          "oklch(49% 0.006 271)",
+          "oklch(61% 0.006 271)",
+          "oklch(72% 0.006 271)",
+          "oklch(84% 0.006 271)",
+          "oklch(95% 0.006 271)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The requested speed on the OLED; the one large number on screen."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The V-Clicker wordmark beside the logo."
+      },
+      "number-key": {
+        "displayName": "Number Row",
+        "purpose": "Legends on the number-row speed keys."
+      },
+      "readout": {
+        "displayName": "Readout",
+        "purpose": "Values in the OLED's three readouts."
+      },
+      "field": {
+        "displayName": "Typed Number",
+        "purpose": "Digits inside number fields, centered."
+      },
+      "status": {
+        "displayName": "Status",
+        "purpose": "OLED and indicator status line, hotkey caps, app names in the window picker."
+      },
+      "key-legend": {
+        "displayName": "Key Legend",
+        "purpose": "Legends on keycaps and the LED badge."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Row captions, LED-check labels, Studio field labels."
+      },
+      "segment": {
+        "displayName": "Segment",
+        "purpose": "Legends in segmented clusters; SemiBold on the chosen cap."
+      },
+      "unit": {
+        "displayName": "Unit",
+        "purpose": "Units at the right of number fields; sub-legends on amber and coral keys."
+      },
+      "silkscreen": {
+        "displayName": "Silkscreen",
+        "purpose": "Uppercase, tracked group labels on the plate."
+      },
+      "caption": {
+        "displayName": "Glass Caption",
+        "purpose": "Uppercase, tracked captions on the OLED (readouts, LOCK)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Window default for sentences."
+      },
+      "body-list": {
+        "displayName": "List Text",
+        "purpose": "Lists, text fields, choice boxes, menus."
+      },
+      "note": {
+        "displayName": "Note",
+        "purpose": "OLED message line, subtitles, rate hint, banner notes."
+      },
+      "note-small": {
+        "displayName": "Small Note",
+        "purpose": "Studio help notes, window titles in the picker."
+      }
+    },
+    "shadows": [
+      {
+        "name": "key-shadow",
+        "value": "0 1.5px 0 rgba(0,0,0,0.35), 0 2.5px 0 1px rgba(0,0,0,0.14)",
+        "purpose": "Short soft shadow of every keycap at rest (two passes: 1.5dp at alpha 90/255, inflated 1dp at 2.5dp and alpha 35/255). Removed when pressed or latched."
+      },
+      {
+        "name": "key-skirt",
+        "value": "inset 0 -5.5px 0 <skirt>, inset 2.5px 0 0 <skirt>, inset -2.5px 0 0 <skirt>",
+        "purpose": "The skirt showing around the face: 2.5dp at the sides, 5.5dp at the front; 2.5dp at the front when pressed."
+      },
+      {
+        "name": "face-dish",
+        "value": "linear-gradient(<face mixed 7% toward white>, <face>)",
+        "purpose": "Every keycap face, lighter at the top edge."
+      },
+      {
+        "name": "well-edge",
+        "value": "inset 0 1px 0 #070809, inset 0 -1px 0 #3C3D42",
+        "purpose": "Shaded 1px edge of every recess (dark above, catching light below)."
+      },
+      {
+        "name": "glass-bezel",
+        "value": "0 0 0 3.5px #0E0E11",
+        "purpose": "Bezel around display glass: the plate darkened 45%, shaded like a recess, 11dp radius outside, 8dp glass inside."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 1.5px #F5C542",
+        "purpose": "Focus on keys (6dp) and wells (7dp); the edge of a well being edited or listening. Ink on the amber key itself."
+      }
+    ],
+    "motion": [
+      {
+        "name": "instant",
+        "value": "0ms",
+        "purpose": "No animation anywhere: hover, press (1.5dp travel), latch, lamps and selection repaint at once."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Start Key (Primary)",
+      "kind": "button",
+      "refersTo": "key-primary",
+      "description": "The one amber key per window: the wide Start key on the main window (Run, Confirm, Apply, OK elsewhere), hotkey as a sub-legend.",
+      "html": "<button class=\"ds-key-primary\"><span class=\"ds-legend\">Iniciar</span><span class=\"ds-sub\">F6</span></button>",
+      "css": ".ds-key-primary{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:1px 2.5px 5.5px;border:0;border-radius:5px;cursor:pointer;color:#17181B;background:linear-gradient(#F5C94F,#F5C542);box-shadow:inset 0 -5.5px 0 #BF952A,inset 2.5px 0 0 #BF952A,inset -2.5px 0 0 #BF952A,0 1.5px 0 rgba(0,0,0,.35),0 2.5px 0 1px rgba(0,0,0,.14);font-family:Bahnschrift, \"DIN Alternate\", \"Segoe UI\", sans-serif;font-weight:600;font-size:9.5pt;line-height:1.1;width:280px;height:60px;}.ds-key-primary:hover{background:#F6CD5C}.ds-key-primary:active,.ds-key-primary[aria-pressed=true]{transform:translateY(1.5px);padding-bottom:2.5px;box-shadow:inset 0 -2.5px 0 #BF952A,inset 2.5px 0 0 #BF952A,inset -2.5px 0 0 #BF952A}.ds-key-primary:focus-visible{outline:1.5px solid #17181B;outline-offset:-1px}.ds-key-primary .ds-sub{font-size:8.5pt;color:#645428}.ds-key-primary .ds-legend{font-size:13pt}"
+    },
+    {
+      "name": "Stop Key (Coral, latched)",
+      "kind": "button",
+      "refersTo": "key-stop",
+      "description": "The Start key while clicking: coral, held down; pressing it stops. Delete uses the same coral key, unlatched.",
+      "html": "<button class=\"ds-key-stop\" aria-pressed=\"true\"><span class=\"ds-legend\">Stop</span><span class=\"ds-sub\">F6</span></button>",
+      "css": ".ds-key-stop{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:1px 2.5px 5.5px;border:0;border-radius:5px;cursor:pointer;color:#17181B;background:linear-gradient(#F16E65,#F0645A);box-shadow:inset 0 -5.5px 0 #B9483F,inset 2.5px 0 0 #B9483F,inset -2.5px 0 0 #B9483F,0 1.5px 0 rgba(0,0,0,.35),0 2.5px 0 1px rgba(0,0,0,.14);font-family:Bahnschrift, \"DIN Alternate\", \"Segoe UI\", sans-serif;font-weight:600;font-size:9.5pt;line-height:1.1;width:280px;height:60px;}.ds-key-stop:hover{background:#F27971}.ds-key-stop:active,.ds-key-stop[aria-pressed=true]{transform:translateY(1.5px);padding-bottom:2.5px;box-shadow:inset 0 -2.5px 0 #B9483F,inset 2.5px 0 0 #B9483F,inset -2.5px 0 0 #B9483F}.ds-key-stop:focus-visible{outline:1.5px solid #F5C542;outline-offset:-1px}.ds-key-stop .ds-sub{font-size:8.5pt;color:#623231}.ds-key-stop .ds-legend{font-size:13pt}"
+    },
+    {
+      "name": "Action Key (Mod)",
+      "kind": "button",
+      "refersTo": "key-mod",
+      "description": "Grey modifier key for actions: Macro Studio, Capture, Choose, New, Rename, Save, Record, Cancel.",
+      "html": "<button class=\"ds-key-mod\">Macro Studio</button>",
+      "css": ".ds-key-mod{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:1px 2.5px 5.5px;border:0;border-radius:5px;cursor:pointer;color:#ECE8DF;background:linear-gradient(#575A62,#4B4E57);box-shadow:inset 0 -5.5px 0 #26282D,inset 2.5px 0 0 #26282D,inset -2.5px 0 0 #26282D,0 1.5px 0 rgba(0,0,0,.35),0 2.5px 0 1px rgba(0,0,0,.14);font-family:Bahnschrift, \"DIN Alternate\", \"Segoe UI\", sans-serif;font-weight:600;font-size:9.5pt;line-height:1.1;width:136px;height:36px;}.ds-key-mod:hover{background:#595C64}.ds-key-mod:active,.ds-key-mod[aria-pressed=true]{transform:translateY(1.5px);padding-bottom:2.5px;box-shadow:inset 0 -2.5px 0 #26282D,inset 2.5px 0 0 #26282D,inset -2.5px 0 0 #26282D}.ds-key-mod:focus-visible{outline:1.5px solid #F5C542;outline-offset:-1px}.ds-key-mod .ds-sub{font-size:7.5pt;color:#B3B2AF}"
+    },
+    {
+      "name": "Number-Row Key (Alpha)",
+      "kind": "button",
+      "refersTo": "key-number-row",
+      "description": "Graphite alpha key for options and small or repeated actions; here a speed preset with its unit as a sub-legend.",
+      "html": "<button class=\"ds-key-alpha\"><span class=\"ds-legend\">10</span><span class=\"ds-sub\">CPS</span></button>",
+      "css": ".ds-key-alpha{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:1px 2.5px 5.5px;border:0;border-radius:5px;cursor:pointer;color:#ECE8DF;background:linear-gradient(#414349,#33353C);box-shadow:inset 0 -5.5px 0 #16171A,inset 2.5px 0 0 #16171A,inset -2.5px 0 0 #16171A,0 1.5px 0 rgba(0,0,0,.35),0 2.5px 0 1px rgba(0,0,0,.14);font-family:Bahnschrift, \"DIN Alternate\", \"Segoe UI\", sans-serif;font-weight:600;font-size:9.5pt;line-height:1.1;width:68px;height:42px;}.ds-key-alpha:hover{background:#43454B}.ds-key-alpha:active,.ds-key-alpha[aria-pressed=true]{transform:translateY(1.5px);padding-bottom:2.5px;box-shadow:inset 0 -2.5px 0 #16171A,inset 2.5px 0 0 #16171A,inset -2.5px 0 0 #16171A}.ds-key-alpha:focus-visible{outline:1.5px solid #F5C542;outline-offset:-1px}.ds-key-alpha .ds-sub{font-size:7.5pt;color:#ABA9A5}.ds-key-alpha .ds-legend{font-size:12pt}"
+    },
+    {
+      "name": "Segmented Keys",
+      "kind": "chip",
+      "refersTo": "segmented",
+      "description": "Mutually exclusive options as keys in one recess; the chosen key is the light cap, held down.",
+      "html": "<div class=\"ds-seg\" role=\"radiogroup\" aria-label=\"Speed unit\"><button class=\"ds-seg-key\" role=\"radio\" aria-checked=\"true\">CPS</button><button class=\"ds-seg-key\" role=\"radio\" aria-checked=\"false\">Intervalo</button></div>",
+      "css": ".ds-seg{display:flex;gap:2px;width:300px;height:32px;padding:3px;background:#111215;border-radius:7px;box-shadow:inset 0 1px 0 #070809,inset 0 -1px 0 #3C3D42}.ds-seg:focus-within{box-shadow:inset 0 0 0 1.5px #F5C542}.ds-seg-key{flex:1;padding:0 0 5.5px;border:0;border-radius:5px;cursor:pointer;color:#A3A19A;background:linear-gradient(#414349,#33353C);box-shadow:inset 0 -5.5px 0 #16171A,0 1.5px 0 rgba(0,0,0,.35);font-family:Bahnschrift, \"DIN Alternate\", \"Segoe UI\", sans-serif;font-size:9.25pt;font-weight:400}.ds-seg-key:hover{background:#43454B;color:#ECE8DF}.ds-seg-key:focus-visible{outline:none}.ds-seg-key[aria-checked=true]{transform:translateY(1.5px);padding-bottom:2.5px;color:#17181B;font-weight:600;background:linear-gradient(#E8E4D8,#E7E2D6);box-shadow:inset 0 -2.5px 0 #B3AC9C}"
+    },
+    {
+      "name": "Number Field",
+      "kind": "input",
+      "refersTo": "field-number",
+      "description": "Anything typed sits in a recess; the edge turns amber while editing; the unit sits at the right.",
+      "html": "<label class=\"ds-field\"><input value=\"10\" inputmode=\"decimal\" aria-label=\"Clicks per second\"><span>CPS</span></label>",
+      "css": ".ds-field{display:inline-flex;align-items:center;gap:5px;width:150px;height:32px;padding:0 10px;background:#111215;border-radius:7px;box-shadow:inset 0 1px 0 #070809,inset 0 -1px 0 #3C3D42}.ds-field:focus-within{box-shadow:inset 0 0 0 1.5px #F5C542}.ds-field input{flex:1;min-width:0;border:0;outline:none;background:transparent;color:#ECE8DF;text-align:center;font-family:Bahnschrift, \"DIN Alternate\", \"Segoe UI\", sans-serif;font-size:10.5pt}.ds-field span{color:#A3A19A;font-family:Bahnschrift, \"DIN Alternate\", \"Segoe UI\", sans-serif;font-weight:600;font-size:8.5pt}"
+    },
+    {
+      "name": "Silkscreen Section",
+      "kind": "custom",
+      "refersTo": "section-label",
+      "description": "A group is named by uppercase tracked lettering on the plate followed by a hairline; never a card.",
+      "html": "<div class=\"ds-section\" role=\"heading\" aria-level=\"2\">Velocidade dos cliques</div>",
+      "css": ".ds-section{display:flex;align-items:center;gap:10px;height:28px;padding-top:10px;box-sizing:border-box;color:#A3A19A;font-family:Bahnschrift, \"DIN Alternate\", \"Segoe UI\", sans-serif;font-weight:600;font-size:8pt;letter-spacing:1.4px;text-transform:uppercase}.ds-section::after{content:\"\";flex:1;height:1px;background:#2D2F35}"
+    },
+    {
+      "name": "LED Check",
+      "kind": "custom",
+      "refersTo": "led-check",
+      "description": "An on/off option as a lock key: a small cap whose lamp lights amber when on, the label beside it.",
+      "html": "<label class=\"ds-led\"><input type=\"checkbox\" checked><span class=\"ds-led-cap\"><i></i></span>Indicador na tela</label>",
+      "css": ".ds-led{display:inline-flex;align-items:center;gap:10px;cursor:pointer;color:#ECE8DF;font-family:Bahnschrift, \"DIN Alternate\", \"Segoe UI\", sans-serif;font-size:9.75pt}.ds-led input{position:absolute;opacity:0;width:1px;height:1px}.ds-led-cap{display:inline-flex;align-items:center;justify-content:center;width:26px;height:24px;box-sizing:border-box;padding:1px 2.5px 5.5px;border-radius:5px;background:linear-gradient(#414349,#33353C);box-shadow:inset 0 -5.5px 0 #16171A,0 1.5px 0 rgba(0,0,0,.35)}.ds-led-cap i{width:7px;height:7px;border-radius:50%;background:#3F3311;box-shadow:inset 0 0 0 1px rgba(245,197,66,.27)}.ds-led:hover .ds-led-cap{background:#43454B}.ds-led input:checked+.ds-led-cap{transform:translateY(1.5px);padding-bottom:2.5px;background:linear-gradient(#575A62,#4B4E57);box-shadow:inset 0 -2.5px 0 #26282D}.ds-led input:checked+.ds-led-cap i{background:radial-gradient(circle at 38% 34%,rgba(255,255,255,.47) 0 18%,#F5C542 19%);box-shadow:none}.ds-led input:focus-visible+.ds-led-cap{outline:1.5px solid #F5C542;outline-offset:0}"
+    },
+    {
+      "name": "Display Glass (OLED)",
+      "kind": "custom",
+      "refersTo": "display-glass",
+      "description": "The main window's instrument: status lamp and line, LOCK lamp, the requested speed large, three readouts, a hairline and the message line.",
+      "html": "<div class=\"ds-oled\" role=\"status\"><div class=\"ds-oled-top\"><i class=\"ds-lamp ds-on\"></i><b>Clicando</b><span class=\"ds-cap\">LOCK</span><i class=\"ds-lamp ds-lock\"></i></div><div class=\"ds-oled-mid\"><span class=\"ds-rate\">10,0</span><span class=\"ds-unit\"><span class=\"ds-cap\">SOLICITADO</span>CPS</span><dl><dt class=\"ds-cap\">CLIQUES</dt><dd>12</dd><dt class=\"ds-cap\">ENVIADO</dt><dd>10,0</dd><dt class=\"ds-cap\">TEMPO</dt><dd>00:01</dd></dl></div><p>Enviados ao Windows; o jogo pode reconhecer menos.</p></div>",
+      "css": ".ds-oled{width:372px;box-sizing:border-box;padding:18px;border-radius:8px;background:#0B0C0E;color:#ECE8DF;box-shadow:0 0 0 1px #1A1B1F,0 0 0 3.5px #0E0E11;font-family:Bahnschrift, \"DIN Alternate\", \"Segoe UI\", sans-serif}.ds-oled-top{display:flex;align-items:center;gap:8px;height:18px;font-size:10pt}.ds-oled-top b{flex:1;font-weight:600}.ds-lamp{width:8px;height:8px;border-radius:50%;background:#183A24}.ds-lamp.ds-on{background:radial-gradient(circle at 38% 34%,rgba(255,255,255,.47) 0 18%,#5FE08C 19%)}.ds-lamp.ds-lock{width:6px;height:6px;background:#3F3311}.ds-cap{color:#A3A19A;font-weight:600;font-size:7.5pt;letter-spacing:1.2px}.ds-oled-mid{display:flex;align-items:center;gap:8px;height:60px;margin-top:10px}.ds-rate{font-weight:300;font-size:30pt;line-height:1}.ds-unit{display:flex;flex-direction:column;flex:1;color:#A3A19A;font-weight:600;font-size:11pt}.ds-oled dl{display:grid;grid-template-columns:auto auto;width:150px;margin:0;row-gap:4px}.ds-oled dd{margin:0;text-align:right;font-weight:600;font-size:11.5pt}.ds-oled p{margin:10px 0 0;padding-top:8px;border-top:1px solid #292B31;color:#A3A19A;font-family:\"Segoe UI\", system-ui, sans-serif;font-size:9pt}"
+    },
+    {
+      "name": "On-screen Indicator",
+      "kind": "custom",
+      "refersTo": "hud",
+      "description": "A sliver of display glass over the game: a pill with a status lamp and the main window's status words.",
+      "html": "<div class=\"ds-hud\" role=\"status\"><i></i>Clicando</div>",
+      "css": ".ds-hud{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 18px 0 13.5px;border-radius:16px;background:#0B0C0E;opacity:.92;color:#ECE8DF;font-family:Bahnschrift, \"DIN Alternate\", \"Segoe UI\", sans-serif;font-weight:600;font-size:10pt}.ds-hud i{width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 38% 34%,rgba(255,255,255,.47) 0 18%,#5FE08C 19%)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Custom Keyboard",
+    "overview": "V-Clicker is drawn as a piece of hardware sitting next to the game: a graphite anodized plate, PBT keycaps in two flat layers (a face on a skirt), a black OLED module set into the plate, LEDs for anything that is on or off, and silkscreen lettering where other apps put panels. Every action is a key you press, every option is a key you hold down, every number you type sits in a recess in the plate, and every live number sits behind glass. The window is small and dense like a keyboard's top case, and it is built to be read at a glance from beside a game: running or not, how fast, what F6 will do.\n\nThe material story replaces the category's dashboard. There are no rounded cards on a dark page, no blue accent, no gamer RGB, and the brand's paper-collage art (butter yellow, cream, graphite card) stays in the logo and the brand kit. Color is spent the way a custom keyboard spends an accent keycap: one amber key per window is the thing that window exists to do; coral appears when that key becomes Stop or when something is deleted; green, orange and red exist only as lamps and message lines. Everything else is graphite, grey and off-white.\n\nDepth is physical and has exactly three heights: recessed (wells and display glass), the plate, and raised (keycaps with a skirt and a short shadow). State is shown the way hardware shows it: a pressed key sits 1.5dp lower without its shadow, the chosen option is the light cap held down, an option that is on lights its lamp. Nothing animates; every change repaints at once.",
+    "keyCharacteristics": [
+      "Graphite plate, keycaps with a visible skirt, recessed wells, black display glass.",
+      "One amber key per window; coral only to stop or delete; signal colors only as lamps and messages.",
+      "Bahnschrift (DIN) for everything printed on the hardware, Segoe UI for sentences.",
+      "Groups are silkscreen labels with a hairline, never cards.",
+      "Instant, physical state changes: travel, lamps, held-down caps; no motion.",
+      "Every metric in dp through `Theme.Dp`, every type size in points."
+    ],
+    "rules": [
+      {
+        "name": "The One Amber Key Rule",
+        "body": "Each window has exactly one amber key, the action the window exists for (Start, Run, Confirm, Apply, OK). Elsewhere amber only lights lamps and marks focus; it is never a fill, a heading color or a decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Coral Means Stop Rule",
+        "body": "Coral is the key that ends what is running or deletes something. It is never a second accent and never a warning color for text; warnings are Lamp Orange.",
+        "section": "colors"
+      },
+      {
+        "name": "The Lamps Only Rule",
+        "body": "Green, orange and red appear only as LEDs and as the color of a message line, note or step description. They are never a key face, a fill or a border.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Bahnschrift for anything printed on the hardware (legends, labels, numbers, units, silkscreen); Segoe UI for anything that is a sentence. A number is never Segoe UI and a two-line explanation is never Bahnschrift.",
+        "section": "typography"
+      },
+      {
+        "name": "The Silkscreen Rule",
+        "body": "A group is named by one uppercase silkscreen label in Dim Legend, sitting low in its 28dp row and followed by a hairline. Nothing sits above it: no kicker, eyebrow or second heading.",
+        "section": "typography"
+      },
+      {
+        "name": "The Three Heights Rule",
+        "body": "Anything typed, listed or chosen from sits recessed; anything pressed is raised; anything live is behind glass. Nothing else gets depth.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Physical Press Rule",
+        "body": "Pressed, latched and chosen keys drop 1.5dp, show less skirt (2.5dp instead of 5.5dp) and lose their shadow. Hover lightens the face (8% toward white on graphite and grey keys, 14% on light, amber and coral keys); disabled mixes face and skirt 55% toward the plate. No glow, no scale, no animation.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** give each window exactly one amber key, the action it exists for (Start, Run, Confirm, Apply, OK), and make every other action a grey Mod key.",
+      "**Do** use graphite Alpha keys for options and for small or repeated actions (the number row, the step-edit bar, unchosen segments).",
+      "**Do** show the chosen option as the light cap held down inside a recessed cluster.",
+      "**Do** put everything typed in a recessed well (#111215, 7dp) whose edge turns amber (1.5dp) while it is being edited.",
+      "**Do** put live numbers, status and messages on display glass (#0B0C0E in an 11dp bezel), with a lamp for state.",
+      "**Do** open every group with a silkscreen label (8pt Bahnschrift SemiBold, uppercase, 1.4dp tracking, #A3A19A) and a hairline (#2D2F35).",
+      "**Do** draw every icon in `Icons.cs` on the 16-unit grid with one round-capped stroke.",
+      "**Do** route every pixel metric through `Theme.Dp`/`Pad`/`Sz` and give every font size in points.",
+      "**Do** keep keyboard operation, a visible amber focus mark and an accessible name and role on every painted control."
+    ],
+    "donts": [
+      "**Don't** put a second amber key in a window or use amber as a fill, text color or decoration.",
+      "**Don't** use coral for anything but stopping or deleting, or green, orange and red for anything but lamps and message text.",
+      "**Don't** raise a group onto a filled, bordered card; groups live on the plate under a silkscreen label, and a hairline frame is only for a region that scrolls.",
+      "**Don't** put a kicker or eyebrow above a heading.",
+      "**Don't** use font glyphs or emoji as icons; they render differently on every Windows build and never match the legends.",
+      "**Don't** set a legend, label or number in Segoe UI, or a sentence in Bahnschrift.",
+      "**Don't** use a blue accent, RGB lighting effects or the brand kit's paper textures and collage art in the interface (the logo appears as itself, in the header).",
+      "**Don't** animate state changes or float panels on drop shadows; depth comes only from the three heights.",
+      "**Don't** set text below Dim Legend's contrast (#A3A19A, WCAG AA on the plate and on key faces)."
+    ]
+  }
+}

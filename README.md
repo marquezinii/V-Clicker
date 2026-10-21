@@ -1,9 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/logo-horizontal-color.png">
-  <img src="assets/brand/logo-horizontal-navy.png" width="440" alt="V-Clicker">
-</picture>
+<img src="assets/brand/logo-horizontal.png" width="440" alt="V-Clicker">
 
 # V-Clicker
 
@@ -94,10 +91,10 @@ src/             o aplicativo (WinForms, .NET Framework 4.8, sem dependências d
   ImageTarget.cs   reconhecimento de imagem (correlação normalizada em blocos de 8 px; funções puras, testáveis)
   Hotkey.cs        atalhos globais (RegisterHotKey) e validação
   Settings.cs      configurações em .ini, com validação e fallback seguro
-  MainForm.cs      janela principal;  Controls.cs / Theme.cs  controles e tema escuros
+  MainForm.cs      janela principal;  Controls.cs / Theme.cs / Icons.cs  teclas, LEDs, display e ícones desenhados (DESIGN.md)
   Loc.cs           textos em português e inglês
 tests/           executor de testes sem dependências (99 testes unitários + 8 de integração)
-assets/          ícone do app e identidade visual (assets/brand: logos, símbolo e wordmarks)
+assets/          ícone do app e identidade visual (assets/brand: ícone, logos e artes da marca)
 docs/            capturas de tela
 ```
 
