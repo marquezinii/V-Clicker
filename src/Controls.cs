@@ -292,8 +292,10 @@ namespace VClicker
     internal sealed class NumberField : Control
     {
         private readonly TextBox box = new TextBox();
-        private int minimum, maximum = int.MaxValue, number;
+        private double minimum, maximum = int.MaxValue, number;
+        private int decimals;
         private string unit = string.Empty;
+        private string shownText; // text standing in for the number (see ShowText) until the user edits it
         private bool editing;
 
         public event EventHandler ValueChanged;
@@ -308,7 +310,7 @@ namespace VClicker
             box.ForeColor = Theme.Text;
             box.Font = Font;
             box.TextAlign = HorizontalAlignment.Center;
-            box.MaxLength = 10;
+            box.MaxLength = 14;
             box.Text = "0";
             box.Enter += delegate { editing = true; Invalidate(); BeginInvoke(new Action(box.SelectAll)); };
             box.Leave += delegate { Commit(); editing = false; Invalidate(); };
@@ -326,8 +328,15 @@ namespace VClicker
 
         protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(Theme.Backdrop(this));
 
-        public int Minimum { get => minimum; set => minimum = value; }
-        public int Maximum { get => maximum; set => maximum = value; }
+        public double Minimum { get => minimum; set => minimum = value; }
+        public double Maximum { get => maximum; set => maximum = value; }
+
+        /// <summary>Digits allowed after the decimal separator (0 = whole numbers only).</summary>
+        public int Decimals
+        {
+            get => decimals;
+            set { decimals = Math.Max(0, Math.Min(6, value)); Number = number; }
+        }
 
         public string Unit
         {
@@ -343,33 +352,67 @@ namespace VClicker
 
         public int Value
         {
+            get => (int)Math.Round(number);
+            set => Number = value;
+        }
+
+        /// <summary>The value, rounded to <see cref="Decimals"/> and clamped to the range.</summary>
+        public double Number
+        {
             get => number;
             set
             {
-                number = Math.Max(minimum, Math.Min(maximum, value));
-                box.Text = number.ToString(CultureInfo.InvariantCulture);
+                number = Clamp(value);
+                shownText = null;
+                box.Text = Format(number);
                 Invalidate();
             }
+        }
+
+        /// <summary>Displays <paramref name="text"/> instead of the number (e.g. "&lt; 0.1") without changing the value.</summary>
+        public void ShowText(string text)
+        {
+            shownText = text;
+            box.Text = text;
+            Invalidate();
         }
 
         /// <summary>Applies whatever is typed (clamped); reverts the text if it is not a number.</summary>
         public void Commit()
         {
-            long parsed;
-            if (!long.TryParse(box.Text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out parsed))
-                parsed = number;
-            int clamped = (int)Math.Max(minimum, Math.Min(maximum, parsed));
-            bool changed = clamped != number;
+            if (shownText != null && box.Text == shownText) return;
+            double clamped = TryParse(box.Text, out double parsed) ? Clamp(parsed) : number;
+            // While a stand-in text was shown the stored number is stale: anything typed is a change.
+            bool changed = clamped != number || shownText != null;
             number = clamped;
-            box.Text = number.ToString(CultureInfo.InvariantCulture);
+            shownText = null;
+            box.Text = Format(number);
             if (changed) ValueChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private double Clamp(double value) =>
+            double.IsNaN(value) ? minimum : Math.Round(Math.Max(minimum, Math.Min(maximum, value)), decimals);
+
+        // Integers keep the invariant form they always had; fractions use the user's decimal separator.
+        private string Format(double value) => decimals == 0
+            ? ((long)value).ToString(CultureInfo.InvariantCulture)
+            : value.ToString("0." + new string('#', decimals), CultureInfo.CurrentCulture);
+
+        /// <summary>Accepts both "," and "." as the decimal separator.</summary>
+        private bool TryParse(string text, out double value)
+        {
+            text = (text ?? string.Empty).Trim();
+            if (decimals > 0) text = text.Replace(',', '.');
+            NumberStyles style = NumberStyles.AllowLeadingSign | (decimals > 0 ? NumberStyles.AllowDecimalPoint : 0);
+            return double.TryParse(text, style, CultureInfo.InvariantCulture, out value);
         }
 
         private void Step(int direction, int amount)
         {
             Commit();
-            int before = number;
-            Value = (int)Math.Max(minimum, Math.Min(maximum, (long)number + (long)direction * amount));
+            if (shownText != null) number = minimum; // stepping from a stand-in text starts at the bottom
+            double before = number;
+            Number = number + (double)direction * amount;
             if (number != before) ValueChanged?.Invoke(this, EventArgs.Empty);
             box.SelectAll();
         }
@@ -392,7 +435,7 @@ namespace VClicker
         private void OnBoxKeyPress(object sender, KeyPressEventArgs e)
         {
             bool allowed = char.IsControl(e.KeyChar) || (e.KeyChar >= '0' && e.KeyChar <= '9') ||
-                           (e.KeyChar == '-' && minimum < 0);
+                           (e.KeyChar == '-' && minimum < 0) || (decimals > 0 && (e.KeyChar == ',' || e.KeyChar == '.'));
             if (!allowed) e.Handled = true;
         }
 

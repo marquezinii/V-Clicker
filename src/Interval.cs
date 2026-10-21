@@ -2,26 +2,36 @@ using System;
 
 namespace VClicker
 {
-    /// <summary>Conversions between a total interval in milliseconds and the h / min / s / ms fields.</summary>
+    /// <summary>
+    /// Conversions between a total interval in milliseconds (fractional, so 15 clicks/s is exactly 66.667 ms),
+    /// the h / min / s / ms fields and clicks per second.
+    /// </summary>
     internal static class Interval
     {
-        public const int MinMs = 1;
-        public const int MaxMs = 24 * 60 * 60 * 1000 - 1;
+        public const double MinMs = 1;
+        public const double MaxMs = 24 * 60 * 60 * 1000 - 1;
+        public const double MinCps = 0.1;
+        public const double MaxCps = 1000;
 
-        public static int Clamp(long totalMs) => (int)Math.Max(MinMs, Math.Min(MaxMs, totalMs));
+        public static double Clamp(double totalMs) =>
+            double.IsNaN(totalMs) ? MinMs : Math.Max(MinMs, Math.Min(MaxMs, totalMs));
 
-        public static int Join(int hours, int minutes, int seconds, int milliseconds) =>
-            Clamp(((hours * 60L + minutes) * 60 + seconds) * 1000 + milliseconds);
+        public static double Join(int hours, int minutes, int seconds, double milliseconds) =>
+            Clamp(((hours * 60.0 + minutes) * 60 + seconds) * 1000 + milliseconds);
 
-        public static void Split(int totalMs, out int hours, out int minutes, out int seconds, out int milliseconds)
+        public static void Split(double totalMs, out int hours, out int minutes, out int seconds, out double milliseconds)
         {
             totalMs = Clamp(totalMs);
-            milliseconds = totalMs % 1000;
-            seconds = totalMs / 1000 % 60;
-            minutes = totalMs / 60000 % 60;
-            hours = totalMs / 3600000;
+            long whole = (long)Math.Floor(totalMs);
+            milliseconds = whole % 1000 + (totalMs - whole);
+            seconds = (int)(whole / 1000 % 60);
+            minutes = (int)(whole / 60000 % 60);
+            hours = (int)(whole / 3600000);
         }
 
-        public static double ClicksPerSecond(int totalMs) => 1000.0 / Clamp(totalMs);
+        public static double ClicksPerSecond(double totalMs) => 1000.0 / Clamp(totalMs);
+
+        public static double FromCps(double clicksPerSecond) =>
+            Clamp(1000.0 / Math.Max(MinCps, Math.Min(MaxCps, clicksPerSecond)));
     }
 }

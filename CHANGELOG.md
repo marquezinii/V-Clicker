@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Window Lock**: restrict clicks to one app. Pauses on Alt+Tab and resumes when the app is back (or stops, if set);
+  F6 only starts with the app in front, the Start button brings it to the front. Stops for good when the window
+  closes, after 5 minutes paused, or when the PC is locked or suspended. The chosen app (executable) is remembered.
+- **On-screen indicator** (optional, any screen corner): clicking / paused / stopped over the game, click-through and never focused.
+- Tray icon changes color with the state.
+- Speed in **clicks per second** (default) or as an interval; presets 5 / 10 / 15 / 20 / 50 CPS.
+- Live panel compares **requested** CPS with CPS **sent to Windows**.
+
+### Changed
+- The interval is stored with fractional milliseconds (15 CPS is exactly 66.667 ms). Older settings files load unchanged.
+- The elapsed time shown is the session time; the clicking time excludes pauses.
+
 ## [1.0.0] - 2026-10-21
 
 First public release of **V-Clicker**, a complete rewrite of the original AutoClicker prototype

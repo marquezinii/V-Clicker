@@ -1,0 +1,50 @@
+# Roadmap
+
+Itens decididos, mas fora da entrega atual. Cada um ganha planejamento próprio quando chegar a vez.
+
+## Próxima rodada
+
+### Perfis automáticos por aplicativo (V2, depois do Window Lock)
+
+O V-Clicker lembra as configurações de clique de cada aplicativo vinculado no Window Lock, identificado pelo executável
+(o mesmo que o Window Lock já persiste).
+
+| Aplicativo     | Exemplo de configuração salva |
+| -------------- | ----------------------------- |
+| Roblox         | 15 CPS, botão esquerdo        |
+| Cookie Clicker | 50 CPS, botão esquerdo        |
+| Outro          | 10 CPS, botão direito         |
+
+Regras:
+
+1. **Automático:** o usuário não cria, nomeia nem salva perfis. Selecionar o aplicativo no Window Lock carrega o perfil dele; mudar as configurações atualiza o perfil.
+2. **Window Lock desligado:** vale a configuração global (a última usada), como hoje.
+3. **Atalhos globais:** F6/F7/F8 (e qualquer atalho personalizado) são os mesmos para todos os aplicativos; nunca fazem parte do perfil.
+4. **Sem troca durante a execução:** um perfil só é carregado com o V-Clicker parado, nunca com uma sessão ativa ou pausada.
+
+### Window Lock: formas extras de selecionar a janela
+
+A V1 seleciona por uma lista das janelas abertas. Ficam para depois, se valerem a complexidade:
+
+- **Mira:** arrastar um alvo até a janela desejada (programas com várias janelas).
+- **Captura por atalho:** com o aplicativo em primeiro plano, um atalho registra a janela (jogos em tela cheia).
+
+### Window Lock: restrição estrita à área da janela (opcional, desligada por padrão)
+
+Hoje, no modo cursor, o Window Lock confere só se a janela vinculada está em primeiro plano (decisão mantida para não
+atrapalhar jogos que ocultam, prendem ou reposicionam o cursor). Limite conhecido: se o cursor estiver sobre outro
+aplicativo (por exemplo, em outro monitor, com o jogo em janela), um clique pode cair fora do jogo antes de a pausa
+entrar; o teste de integração e a revisão de código reproduziram isso.
+
+Opção futura: só clicar se a janela sob o cursor pertencer à janela vinculada; caso contrário, pausar como "ponto fora
+da janela". Desligada por padrão, com um aviso de que pode interferir em jogos que manipulam o cursor.
+
+## Fase de produtividade
+
+Planejamento próprio, depois de consolidar a experiência casual. Ficam isoladas em uma aba ou modo avançado; o usuário
+casual não precisa entender nada disso para usar o autoclicker.
+
+- **Macro Studio:** gravar ações e editá-las numa linha do tempo (cliques, movimentos, teclas, intervalos, loops).
+- **Conditional Click:** agir só quando uma condição for satisfeita (botão apareceu, cor mudou, janela aberta), com tempo-limite e interrupção.
+- **Smart Target:** achar o alvo por elemento de interface ou imagem, mesmo que a janela mude de posição.
+- **Dados de planilha:** preencher campos a partir de uma planilha (exige digitar texto, não só clicar).

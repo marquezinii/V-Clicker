@@ -18,6 +18,7 @@ namespace VClicker.Tests
             IntervalTests();
             SettingsTests();
             EngineTests();
+            WindowLockTests();
             MiscTests();
         }
 
@@ -88,7 +89,7 @@ namespace VClicker.Tests
         {
             Test("interval: split/join round trip and carry-over", () =>
             {
-                Interval.Split(3723045, out int h, out int m, out int s, out int ms);
+                Interval.Split(3723045, out int h, out int m, out int s, out double ms);
                 Equal(1, h, "hours"); Equal(2, m, "minutes"); Equal(3, s, "seconds"); Equal(45, ms, "ms");
                 Equal(3723045, Interval.Join(h, m, s, ms), "join");
                 Equal(90000, Interval.Join(0, 0, 90, 0), "90 s carries into minutes");
@@ -102,6 +103,26 @@ namespace VClicker.Tests
                 Equal(Interval.MaxMs, Interval.Join(99999, 0, 0, 0), "join does not overflow");
                 Equal(10.0, Interval.ClicksPerSecond(100), "100 ms = 10 cps");
                 Equal(1000.0, Interval.ClicksPerSecond(1), "1 ms = 1000 cps");
+                Equal(Interval.MinMs, Interval.Clamp(double.NaN), "NaN -> 1 ms");
+            });
+
+            Test("interval: fractional milliseconds split and join without loss", () =>
+            {
+                Interval.Split(1000.0 / 15, out int h, out int m, out int s, out double ms);
+                Equal(0, h + m + s, "whole units");
+                True(Math.Abs(ms - 66.6666666) < 1e-6, "ms keeps the fraction, got " + ms);
+                Equal(1000.0 / 15, Interval.Join(h, m, s, ms), "join gives the exact value back");
+                Equal(1000.5, Interval.Join(0, 0, 1, 0.5), "join with a fraction");
+                Interval.Split(61000.25, out h, out m, out s, out ms);
+                Equal(1, m, "minutes"); Equal(1, s, "seconds"); Equal(0.25, ms, "fraction of 61000.25");
+            });
+
+            Test("interval: clicks per second converts both ways and stays in range", () =>
+            {
+                Equal(1000.0 / 15, Interval.FromCps(15), "15 cps is 66.667 ms, not 67");
+                True(Math.Abs(Interval.ClicksPerSecond(Interval.FromCps(15)) - 15) < 1e-9, "round trip");
+                Equal(1.0, Interval.FromCps(5000), "above 1000 cps is capped at 1 ms");
+                Equal(10000.0, Interval.FromCps(0.01), "below 0.1 cps is raised to 0.1");
             });
         }
 
@@ -239,6 +260,75 @@ namespace VClicker.Tests
                     True(!new ClickSettings().Save(Path.Combine(file, "nested", "settings.ini")), "save must return false");
                 }
                 finally { File.Delete(file); }
+            });
+
+            Test("settings: a fractional interval round-trips exactly, whatever the culture", () =>
+            {
+                var original = Thread.CurrentThread.CurrentCulture;
+                string path = TempFile();
+                try
+                {
+                    Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("pt-BR");
+                    True(new ClickSettings { IntervalMs = 1000.0 / 15, SpeedInCps = false }.Save(path), "save");
+                    True(File.ReadAllText(path).Contains("IntervalMs=66.666"), "invariant decimal point in the file");
+                    ClickSettings loaded = ClickSettings.Load(path);
+                    Equal(1000.0 / 15, loaded.IntervalMs, "exact value");
+                    True(!loaded.SpeedInCps, "speed mode");
+                }
+                finally { Thread.CurrentThread.CurrentCulture = original; File.Delete(path); File.Delete(path + ".tmp"); }
+            });
+
+            Test("settings: old whole-number and bad interval values load safely", () =>
+            {
+                string path = TempFile();
+                try
+                {
+                    foreach (var pair in new[]
+                    {
+                        Tuple.Create("100", 100.0), Tuple.Create("NaN", 100.0), Tuple.Create("abc", 100.0),
+                        Tuple.Create("66,667", 100.0), Tuple.Create("-5", 1.0), Tuple.Create("Infinity", Interval.MaxMs)
+                    })
+                    {
+                        File.WriteAllLines(path, new[] { "IntervalMs=" + pair.Item1 });
+                        Equal(pair.Item2, ClickSettings.Load(path).IntervalMs, "IntervalMs=" + pair.Item1);
+                    }
+                    True(ClickSettings.Load(path).SpeedInCps, "an old file opens in CPS mode");
+                }
+                finally { File.Delete(path); }
+            });
+
+            Test("settings: Window Lock and indicator fields round-trip; bad values are repaired", () =>
+            {
+                string path = TempFile();
+                try
+                {
+                    var saved = new ClickSettings
+                    {
+                        WindowLock = true, LockExe = "RobloxPlayerBeta.exe", LockName = "Roblox", LockStopOnFocusLoss = true,
+                        Hud = false, HudCorner = HudCorner.BottomLeft
+                    };
+                    True(saved.Save(path), "save");
+                    ClickSettings loaded = ClickSettings.Load(path);
+                    Equal(string.Join("|", saved.Serialize()), string.Join("|", loaded.Serialize()), "round trip");
+
+                    var defaults = new ClickSettings();
+                    True(!defaults.WindowLock && defaults.Hud && defaults.HudCorner == HudCorner.TopRight && !defaults.LockStopOnFocusLoss,
+                        "defaults: lock off, pause and resume, indicator on, top right");
+
+                    foreach (string bad in new[] { "..\\evil.exe", "a/b.exe", "c:\\x.exe", "notes.txt", ".exe", "  ", "bad|name.exe" })
+                    {
+                        var s = new ClickSettings { LockExe = bad, LockName = "x" };
+                        s.Validate();
+                        Equal("", s.LockExe, "rejected exe '" + bad + "'");
+                    }
+                    var named = new ClickSettings { LockExe = "Game.exe", LockName = "  " };
+                    named.Validate();
+                    Equal("Game", named.LockName, "missing name falls back to the exe name");
+                    var corner = new ClickSettings { HudCorner = (HudCorner)9 };
+                    corner.Validate();
+                    Equal(HudCorner.TopRight, corner.HudCorner, "unknown corner");
+                }
+                finally { File.Delete(path); File.Delete(path + ".tmp"); }
             });
 
             Test("settings: ToPlan maps every field", () =>
@@ -491,6 +581,132 @@ namespace VClicker.Tests
                     "no jitter means exact interval");
             });
 
+            Test("engine: Window Lock pauses, then resumes without a burst", () =>
+            {
+                var sink = new FakeSink();
+                var status = LockStatus.Ok;
+                using (var engine = new ClickEngine(sink))
+                {
+                    engine.Start(new ClickPlan { IntervalMs = 10, Lock = at => status });
+                    Thread.Sleep(80);
+                    True(sink.Count > 0, "clicks while the window is in front");
+                    status = LockStatus.NotFocused;
+                    Thread.Sleep(60);
+                    Equal(EnginePhase.Paused, engine.Phase, "paused");
+                    Equal(LockStatus.NotFocused, engine.PauseCause, "pause cause");
+                    int paused = sink.Count;
+                    Thread.Sleep(300);
+                    Equal(paused, sink.Count, "no click lands while another window is in front");
+                    status = LockStatus.Ok;
+                    Thread.Sleep(100);
+                    Equal(EnginePhase.Clicking, engine.Phase, "resumed by itself");
+                    int resumed = sink.Count - paused;
+                    // 100 ms at 10 ms = ~10 clicks; replaying the 300 ms pause would add ~30 more.
+                    True(resumed >= 5 && resumed <= 14, resumed + " clicks in 100 ms after resuming (missed clicks must be dropped)");
+                    engine.Stop();
+                    True(engine.WaitForStop(1000), "stop");
+                }
+            });
+
+            Test("engine: Window Lock stop rules (closed window, strict mode, spot outside, pause limit)", () =>
+            {
+                using (var engine = new ClickEngine(new FakeSink()))
+                {
+                    Equal(StopReason.TargetClosed, RunToEnd(engine, new ClickPlan { IntervalMs = 5, Lock = at => LockStatus.Closed }).Value, "closed");
+                    Equal(StopReason.FocusLost, RunToEnd(engine, new ClickPlan
+                    {
+                        IntervalMs = 5, StopOnFocusLoss = true, Lock = at => LockStatus.NotFocused
+                    }).Value, "strict mode");
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    Equal(StopReason.PauseTimeout, RunToEnd(engine, new ClickPlan
+                    {
+                        IntervalMs = 5, StopOnFocusLoss = true, PauseLimitMs = 150, Lock = at => LockStatus.PointOutside
+                    }).Value, "a spot outside the window pauses even in strict mode, until the limit");
+                    True(watch.ElapsedMilliseconds >= 140, "pause limit respected, ended after " + watch.ElapsedMilliseconds + " ms");
+                    Equal(0L, engine.Clicks, "never clicked");
+                }
+            });
+
+            Test("engine: the Window Lock check receives the fixed position", () =>
+            {
+                Point? seen = null;
+                using (var engine = new ClickEngine(new FakeSink()))
+                    RunToEnd(engine, new ClickPlan { IntervalMs = 1, MaxClicks = 1, FixedPosition = new Point(7, 8), Lock = at => { seen = at; return LockStatus.Ok; } });
+                Equal(new Point(7, 8), seen.Value, "position passed to the lock");
+            });
+
+            Test("engine: Stop() during a pause ends at once with the requested reason", () =>
+            {
+                var sink = new FakeSink();
+                using (var engine = new ClickEngine(sink))
+                {
+                    foreach (StopReason wanted in new[] { StopReason.Manual, StopReason.Suspended })
+                    {
+                        StopReason? reason = null;
+                        var done = new ManualResetEventSlim();
+                        Action<StopReason> handler = r => { reason = r; done.Set(); };
+                        engine.Stopped += handler;
+                        engine.Start(new ClickPlan { IntervalMs = 5, Lock = at => LockStatus.NotFocused });
+                        Thread.Sleep(60);
+                        Equal(EnginePhase.Paused, engine.Phase, "paused before stopping");
+                        var watch = System.Diagnostics.Stopwatch.StartNew();
+                        engine.Stop(wanted);
+                        True(done.Wait(1000), "did not stop");
+                        True(watch.ElapsedMilliseconds < 200, "stop took " + watch.ElapsedMilliseconds + " ms");
+                        Equal(wanted, reason.Value, "reason");
+                        engine.Stopped -= handler;
+                    }
+                    Equal(0, sink.Count, "no clicks at all");
+                }
+            });
+
+            Test("engine: the start countdown freezes while the locked window is away", () =>
+            {
+                var sink = new FakeSink();
+                var status = LockStatus.Ok;
+                using (var engine = new ClickEngine(sink))
+                {
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    StopReason? reason = null;
+                    var done = new ManualResetEventSlim();
+                    engine.Stopped += r => { reason = r; done.Set(); };
+                    engine.Start(new ClickPlan { IntervalMs = 5, MaxClicks = 1, StartDelayMs = 150, Lock = at => status });
+                    Thread.Sleep(50);
+                    status = LockStatus.NotFocused;
+                    Thread.Sleep(60);
+                    Equal(EnginePhase.Paused, engine.Phase, "countdown paused");
+                    Thread.Sleep(200);
+                    Equal(0, sink.Count, "no click while away");
+                    status = LockStatus.Ok;
+                    True(done.Wait(2000), "finished");
+                    Equal(StopReason.Completed, reason.Value, "reason");
+                    // 150 ms of countdown + ~200 ms away: the first click cannot come before ~330 ms.
+                    True(watch.ElapsedMilliseconds >= 330, "first click after only " + watch.ElapsedMilliseconds + " ms");
+                }
+            });
+
+            Test("engine: clicking time excludes pauses; session time includes them", () =>
+            {
+                var status = LockStatus.Ok;
+                using (var engine = new ClickEngine(new FakeSink()))
+                {
+                    engine.Start(new ClickPlan { IntervalMs = 5, Lock = at => status });
+                    Thread.Sleep(100);
+                    status = LockStatus.NotFocused;
+                    Thread.Sleep(300);
+                    TimeSpan frozen = engine.Elapsed;
+                    Thread.Sleep(100);
+                    True(engine.Elapsed - frozen < TimeSpan.FromMilliseconds(30), "clicking time stands still while paused");
+                    status = LockStatus.Ok;
+                    Thread.Sleep(100);
+                    engine.Stop();
+                    True(engine.WaitForStop(1000), "stop");
+                    True(engine.SessionElapsed >= TimeSpan.FromMilliseconds(580), "session " + engine.SessionElapsed.TotalMilliseconds);
+                    True(engine.Elapsed <= engine.SessionElapsed - TimeSpan.FromMilliseconds(300),
+                        "clicking " + engine.Elapsed.TotalMilliseconds + " vs session " + engine.SessionElapsed.TotalMilliseconds);
+                }
+            });
+
             Test("engine: dispose while running does not hang", () =>
             {
                 var engine = new ClickEngine(new FakeSink());
@@ -498,6 +714,73 @@ namespace VClicker.Tests
                 var watch = System.Diagnostics.Stopwatch.StartNew();
                 engine.Dispose();
                 True(watch.ElapsedMilliseconds < 1500, "dispose took " + watch.ElapsedMilliseconds + " ms");
+            });
+        }
+
+        // ------------------------------------------------------------------ window lock
+
+        private static void WindowLockTests()
+        {
+            Test("window lock: a missing, destroyed or reused window handle counts as closed", () =>
+            {
+                Equal(LockStatus.Closed, WindowLock.Check(IntPtr.Zero, 1, null), "zero handle");
+                IntPtr handle;
+                uint self = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                using (var form = new Form { ShowInTaskbar = false })
+                {
+                    handle = form.Handle;
+                    // Windows recycles handles: the same handle owned by another process is not "our" window.
+                    Equal(LockStatus.Closed, WindowLock.Check(handle, self + 1, null), "another process id");
+                    True(WindowLock.Check(handle, self, null) != LockStatus.Closed, "live window of the right process");
+                }
+                Equal(LockStatus.Closed, WindowLock.Check(handle, self, null), "destroyed window");
+            });
+
+            Test("window lock: describes a window with its exe; never lists V-Clicker's own windows", () =>
+            {
+                using (var form = new Form { Text = "V-Clicker lock probe", ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
+                {
+                    form.Show();
+                    Application.DoEvents();
+                    AppWindow self = WindowLock.FromHandle(form.Handle);
+                    True(self != null, "described");
+                    Equal("V-Clicker.Tests.exe", self.ExeName, "exe file name only");
+                    Equal("V-Clicker lock probe", self.Title, "title");
+                    True(self.DisplayName.Length > 0, "friendly name");
+                    True(!WindowLock.List().Any(w => w.Handle == form.Handle), "own process is filtered out");
+                    True(WindowLock.List("no-such-app.exe").Count == 0, "exe filter");
+                }
+                True(WindowLock.FromHandle(IntPtr.Zero) == null, "no window");
+            });
+
+            Test("indicator: never activates, lets clicks through and stays out of Alt+Tab", () =>
+            {
+                const int Transparent = 0x20, NoActivate = 0x8000000, ToolWindow = 0x80, TopMost = 0x8;
+                foreach (int style in new[] { Transparent, NoActivate, ToolWindow, TopMost })
+                    True((Hud.ExStyles & style) == style, "extended style 0x" + style.ToString("X"));
+                using (var hud = new Hud())
+                {
+                    IntPtr before = WindowLock.Foreground();
+                    hud.Display(Color.Lime, "15 CPS", new Rectangle(-20000, -20000, 800, 600), HudCorner.TopRight);
+                    Application.DoEvents();
+                    True(hud.Visible, "shown");
+                    Equal(before, WindowLock.Foreground(), "showing it did not take the foreground");
+                    True(hud.Right == -20000 + 800 - Theme.Dp(16), "top-right corner of the given screen");
+                }
+            });
+
+            Test("tray: state icons are tray-sized and distinct from the app icon", () =>
+            {
+                using (var form = new MainForm(TempFile(), new FakeSink()))
+                using (Icon green = MainForm.WithDot(form.Icon, Color.Lime))
+                {
+                    Equal(SystemInformation.SmallIconSize, green.Size, "size");
+                    using (Bitmap bitmap = green.ToBitmap())
+                    {
+                        Color corner = bitmap.GetPixel(bitmap.Width - 4, bitmap.Height - 4);
+                        True(corner.G > 200 && corner.R < 100, "the status dot is drawn in the corner: " + corner);
+                    }
+                }
             });
         }
 
@@ -525,6 +808,32 @@ namespace VClicker.Tests
                 Equal("Iniciando em 2 s", Loc.F("status.countdown", "2 s"), "portuguese format");
                 Equal("no.such.key", Loc.T("no.such.key"), "unknown key is returned as-is");
                 Loc.SetLanguage("auto");
+            });
+
+            Test("number field: decimals with either separator; a stand-in text never hides a typed value", () =>
+            {
+                using (var field = new NumberField { Minimum = 0.1, Maximum = 1000, Decimals = 1 })
+                {
+                    var box = (TextBox)field.Controls[0];
+                    int changes = 0;
+                    field.ValueChanged += delegate { changes++; };
+                    box.Text = "12,34";
+                    field.Commit();
+                    Equal(12.3, field.Number, "comma, rounded to one decimal");
+                    box.Text = "7.5";
+                    field.Commit();
+                    Equal(7.5, field.Number, "point");
+                    Equal(2, changes, "two edits");
+
+                    field.Number = 5;
+                    field.ShowText("< 0,1"); // the speed is below the field's range
+                    field.Commit();
+                    Equal(2, changes, "leaving the stand-in text untouched is not an edit");
+                    box.Text = "5";
+                    field.Commit();
+                    Equal(3, changes, "typing the stale value still counts as an edit");
+                    Equal(5.0, field.Number, "value");
+                }
             });
 
             Test("window: a screen shorter than the window caps the height and scrolls", () =>

@@ -20,7 +20,8 @@ A single `.exe`: no installer, no telemetry, no network.
 ## Features
 
 - **Real speed** – intervals from **1 ms** up to 24 h (up to ~1000 clicks/s, depending on the target program), using an absolute schedule that never accumulates lag plus a high-resolution wait.
-- **Interval in h / min / s / ms**, with quick presets (`1/s`, `10/s`, `50/s`, `100/s`, `500/s`) and a live clicks-per-second readout.
+- **Speed in CPS** (clicks per second, one decimal) or as an **interval in h / min / s / ms**: both edit the same speed, with no rounding (15 CPS = 66.667 ms). Presets `5`, `10`, `15`, `20` and `50 CPS`.
+- **Window Lock**: pick an app (e.g. Roblox) and V-Clicker only clicks while it is in front. On Alt+Tab it **pauses and resumes by itself** when you come back (or stops, if you prefer). F6 only starts with the app in front; the *Start* button brings it to the front. It stops for good if the window closes, if a pause lasts over 5 minutes, or if the PC is locked or goes to sleep.
 - **Random variation** (±0–50 %) for less mechanical clicking.
 - **Left, middle or right button**, **single or double** click.
 - **Repeat forever or N times** (up to 1 billion); it stops by itself when done.
@@ -28,7 +29,8 @@ A single `.exe`: no installer, no telemetry, no network.
 - **Toggle or Hold mode**: the hotkey switches on/off, or clicks **only while you hold it**.
 - **Configurable global hotkeys** (default: `F6` start/stop, `F8` stop, `F7` capture position) that work while another program has focus or the window is minimized.
 - **Start delay** (0–30 s) so you can position the mouse.
-- **Live panel**: click count, measured clicks per second and elapsed time.
+- **Live panel**: click count, **requested** CPS vs. CPS **sent to Windows** (the game may register fewer; V-Clicker does not pretend to measure that) and elapsed time.
+- **On-screen indicator** (optional): a small pill in a screen corner shows *clicking*, *paused* or *stopped* over the game, never taking clicks or focus. The tray icon also changes color with the state.
 - **System tray**, **always on top**, **sound cues**, **single instance**, **English/Portuguese** and a **dark theme** (dark title bar on Windows 10/11).
 - **High-DPI aware** (4K screens, 125 % / 150 % scaling…).
 - **Settings are saved automatically**, plus a **portable mode** (see below).
@@ -77,12 +79,14 @@ Requires the [.NET SDK](https://dotnet.microsoft.com/download) (any current vers
 
 ```
 src/             the app (WinForms, .NET Framework 4.8, no third-party dependencies)
-  ClickEngine.cs   click loop on a dedicated thread (timing, jitter, hold mode)
+  ClickEngine.cs   click loop on a dedicated thread (timing, jitter, hold mode, Window Lock pause)
+  WindowLock.cs    Windows windows for Window Lock (list, focus, window area);  WindowPicker.cs  app chooser
+  Hud.cs           on-screen indicator (separate window, click-through, never takes focus)
   Hotkey.cs        global hotkeys (RegisterHotKey) and validation
   Settings.cs      .ini settings with validation and a safe fallback
   MainForm.cs      main window;  Controls.cs / Theme.cs  dark controls and theme
   Loc.cs           Portuguese and English strings
-tests/           dependency-free test runner (36 unit tests + 3 integration tests)
+tests/           dependency-free test runner (52 unit tests + 4 integration tests)
 assets/          official icon
 docs/            screenshots
 ```

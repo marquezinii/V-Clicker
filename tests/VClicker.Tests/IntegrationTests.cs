@@ -179,6 +179,112 @@ namespace VClicker.Tests
                     }
                     finally { probe.UnregisterAll(); }
                 });
+
+                Test("window lock: Alt+Tab to another window pauses with no stray click; coming back resumes", () =>
+                {
+                    string lockIni = Path.Combine(Path.GetTempPath(), "vclicker-it-" + Guid.NewGuid().ToString("N") + ".ini");
+                    MainForm locked = null;
+                    Form other = null;
+                    try
+                    {
+                        // The throw-away target lives in this test process, so the "app" to lock is the test runner itself.
+                        new ClickSettings
+                        {
+                            IntervalMs = 20, StartDelaySeconds = 0, Sounds = false, Hud = false,
+                            WindowLock = true, LockExe = "V-Clicker.Tests.exe", LockName = "Test target"
+                        }.Save(lockIni);
+                        Rectangle screen = Screen.PrimaryScreen.WorkingArea;
+                        locked = new MainForm(lockIni)
+                        {
+                            StartPosition = FormStartPosition.Manual, Location = new Point(screen.Left + 30, screen.Top + 30)
+                        };
+                        locked.Show();
+                        Spin(300);
+
+                        target?.Dispose();
+                        int clicks = 0, strayClicks = 0;
+                        target = new Form
+                        {
+                            Text = "V-Clicker lock target", Size = new Size(350, 260), StartPosition = FormStartPosition.Manual,
+                            TopMost = true, Location = new Point(screen.Left + 560, screen.Top + 30)
+                        };
+                        var button = new Button { Dock = DockStyle.Fill, Text = "Locked target" };
+                        button.Click += delegate { clicks++; };
+                        target.Controls.Add(button);
+                        other = new Form
+                        {
+                            Text = "V-Clicker other app", Size = new Size(350, 200), StartPosition = FormStartPosition.Manual,
+                            TopMost = true, Location = new Point(screen.Left + 560, screen.Top + 330)
+                        };
+                        var otherButton = new Button { Dock = DockStyle.Fill, Text = "Must never be clicked" };
+                        otherButton.Click += delegate { strayClicks++; };
+                        other.Controls.Add(otherButton);
+                        other.Show();
+                        target.Show();
+                        target.Activate();
+                        Spin(200);
+                        Rectangle bounds = button.RectangleToScreen(button.ClientRectangle);
+                        Cursor.Position = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
+
+                        SendKeys.SendWait("{F6}");
+                        Pump(400, target, button);
+                        True(clicks >= 5, "clicks while the locked window is in front, got " + clicks);
+
+                        // The "Alt+Tab": the cursor stays over the locked window. A click Windows had already queued
+                        // when the focus moved can still land and bring the target back (the accepted check-to-send
+                        // race), so switch again until the other window keeps the focus.
+                        for (int attempt = 0; attempt < 5; attempt++)
+                        {
+                            other.Activate();
+                            Pump(150, target, button);
+                            if (WindowLock.Foreground() == other.Handle) break;
+                        }
+                        Equal(EnginePhase.Paused, locked.Engine.Phase, "paused while another window is in front");
+                        int paused = clicks;
+                        Pump(500, target, button);
+                        Equal(paused, clicks, "no click while paused (a click would also have re-activated the target)");
+                        Equal(0, strayClicks, "nothing reached the other window");
+                        True(WindowLock.Foreground() == other.Handle, "the other window kept the focus");
+
+                        target.Activate();
+                        Pump(400, target, button);
+                        Equal(EnginePhase.Clicking, locked.Engine.Phase, "resumed by itself");
+                        True(clicks > paused + 5, "clicking again after coming back: " + (clicks - paused));
+
+                        SendKeys.SendWait("{F8}");
+                        Pump(200, target, button);
+                        Equal(EnginePhase.Idle, locked.Engine.Phase, "F8 stops");
+
+                        // F6 while the locked app is not in front: refused, and nothing is armed for later.
+                        // (Every window here belongs to the test runner, so lock a different, absent app instead.)
+                        locked.Close();
+                        locked.Dispose();
+                        new ClickSettings
+                        {
+                            IntervalMs = 20, StartDelaySeconds = 0, Sounds = false, Hud = false,
+                            WindowLock = true, LockExe = "not-running-app.exe", LockName = "Absent app"
+                        }.Save(lockIni);
+                        locked = new MainForm(lockIni)
+                        {
+                            StartPosition = FormStartPosition.Manual, Location = new Point(screen.Left + 30, screen.Top + 30)
+                        };
+                        locked.Show();
+                        target.Activate();
+                        Spin(300);
+                        int before = clicks;
+                        SendKeys.SendWait("{F6}");
+                        Pump(400, target, button);
+                        Equal(EnginePhase.Idle, locked.Engine.Phase, "F6 with another app in front is refused");
+                        Equal(before, clicks, "no click after a refused start");
+                        Equal(0, strayClicks, "nothing reached the other window");
+                    }
+                    finally
+                    {
+                        if (locked != null && !locked.IsDisposed) { locked.Engine.Stop(); locked.Close(); locked.Dispose(); }
+                        other?.Dispose();
+                        File.Delete(lockIni);
+                    }
+                });
             }
             finally
             {
