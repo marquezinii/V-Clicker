@@ -18,7 +18,7 @@ First public release of **V-Clicker**, a complete rewrite of the original AutoCl
 - System tray, always-on-top, sound cues, single instance, restart-as-administrator link.
 - Settings persisted to `%APPDATA%\V-Clicker\settings.ini`, with a portable mode.
 - Official icon (`assets/`), MIT license, build script, CI and release workflows.
-- Test suite: 31 unit tests plus real-input integration tests.
+- Test suite: 36 unit tests plus 3 real-input integration tests.
 
 ### Changed
 - Minimum interval lowered from 20 ms to 1 ms; the 1-second start delay is now optional (0–30 s).
