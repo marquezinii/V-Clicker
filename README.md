@@ -20,7 +20,8 @@ Um único `.exe`, sem instalador, sem telemetria, sem rede.
 ## Recursos
 
 - **Velocidade de verdade** – intervalo de **1 ms** até 24 h (até ~1000 cliques/s, dependendo do programa-alvo), com agenda absoluta que não acumula atraso e espera de alta resolução.
-- **Intervalo em h / min / s / ms**, com atalhos rápidos (`1/s`, `10/s`, `50/s`, `100/s`, `500/s`) e leitura de cliques por segundo.
+- **Velocidade em CPS** (cliques por segundo, com uma casa decimal) ou **intervalo em h / min / s / ms**: os dois editam a mesma velocidade, sem arredondar (15 CPS = 66,667 ms). Atalhos `5`, `10`, `15`, `20` e `50 CPS`.
+- **Window Lock**: escolha um aplicativo (ex.: Roblox) e o V-Clicker só clica com ele em primeiro plano. Num Alt+Tab, **pausa e retoma sozinho** quando você volta (ou para, se preferir). F6 só começa com o aplicativo na frente; o botão *Iniciar* o traz para a frente. Para de vez se a janela fechar, se a pausa passar de 5 minutos ou se o PC for bloqueado ou suspenso.
 - **Variação aleatória** (±0–50 %) para cliques menos mecânicos.
 - **Botão esquerdo, do meio ou direito**, clique **simples ou duplo**.
 - **Repetir para sempre ou N vezes** (até 1 bilhão), parando sozinho ao terminar.
@@ -28,7 +29,8 @@ Um único `.exe`, sem instalador, sem telemetria, sem rede.
 - **Modo Alternar ou Segurar**: o atalho liga/desliga, ou clica **só enquanto você o segura**.
 - **Atalhos globais configuráveis** (padrão: `F6` inicia/para, `F8` para, `F7` captura a posição), funcionando mesmo com outro programa em foco ou com a janela minimizada.
 - **Atraso inicial** configurável (0–30 s) para você posicionar o mouse.
-- **Painel ao vivo**: cliques, cliques por segundo medidos e tempo.
+- **Painel ao vivo**: cliques, CPS **solicitado** vs. CPS **enviado ao Windows** (o jogo pode reconhecer menos; o V-Clicker não finge medir isso) e tempo.
+- **Indicador na tela** (opcional): uma pequena pílula num canto da tela mostra *clicando*, *pausado* ou *parado* por cima do jogo, sem receber cliques nem foco. O ícone da bandeja também muda de cor com o estado.
 - **Bandeja do sistema**, **sempre no topo**, **avisos sonoros**, **instância única**, **PT/EN** e **tema escuro** com título escuro no Windows 10/11.
 - **Alto DPI** (telas 4K / escala de 125 %, 150 %…).
 - **Configurações salvas** automaticamente e **modo portátil** (veja abaixo).
@@ -77,12 +79,14 @@ Requer o [.NET SDK](https://dotnet.microsoft.com/download) (qualquer versão atu
 
 ```
 src/             o aplicativo (WinForms, .NET Framework 4.8, sem dependências de terceiros)
-  ClickEngine.cs   laço de cliques em thread dedicada (cronometragem, jitter, modo segurar)
+  ClickEngine.cs   laço de cliques em thread dedicada (cronometragem, jitter, modo segurar, pausa do Window Lock)
+  WindowLock.cs    janelas do Windows para o Window Lock (lista, foco, área da janela);  WindowPicker.cs  escolha do app
+  Hud.cs           indicador na tela (janela separada, transparente a cliques, nunca recebe foco)
   Hotkey.cs        atalhos globais (RegisterHotKey) e validação
   Settings.cs      configurações em .ini, com validação e fallback seguro
   MainForm.cs      janela principal;  Controls.cs / Theme.cs  controles e tema escuros
   Loc.cs           textos em português e inglês
-tests/           executor de testes sem dependências (36 testes unitários + 3 de integração)
+tests/           executor de testes sem dependências (61 testes unitários + 4 de integração)
 assets/          ícone oficial
 docs/            capturas de tela
 ```

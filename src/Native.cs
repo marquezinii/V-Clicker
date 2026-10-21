@@ -76,6 +76,9 @@ namespace VClicker
         internal static extern bool SetCursorPos(int x, int y);
 
         [DllImport("user32.dll")]
+        internal static extern bool DestroyIcon(IntPtr icon);
+
+        [DllImport("user32.dll")]
         internal static extern bool GetCursorPos(out POINT point);
 
         [DllImport("user32.dll")]
