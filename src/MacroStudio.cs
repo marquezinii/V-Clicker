@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.VisualBasic.FileIO;
 
@@ -48,8 +51,14 @@ namespace VClicker
         // Capturing a point for the selected step (F7 in the target app).
         private AppWindow captureWindow;
         private int captureIndex = -1;
-        private enum CaptureFor { Point, Convert, Insert, Repoint }
+        private enum CaptureFor { Point, Convert, Insert, Repoint, Target, Retarget }
         private CaptureFor captureFor;
+
+        // After F7 for a condition or a target: the point is read off the UI thread (the app stays in front).
+        private Task<object> analyzing;
+        private int analyzingIndex;
+        private CaptureFor analyzingFor;
+        private AppWindow analyzingWindow;
 
         // The status line, and what the indicator flashes after a stop.
         private string message;
@@ -109,7 +118,7 @@ namespace VClicker
         // ------------------------------------------------------------------ state the main window reads
 
         /// <summary>Recording (or counting down to it) or running a macro.</summary>
-        public bool Busy => recordStartAt != 0 || recorder != null || player.Phase != MacroPhase.Idle || conditionDialogOpen;
+        public bool Busy => recordStartAt != 0 || recorder != null || player.Phase != MacroPhase.Idle || conditionDialogOpen || analyzing != null;
 
         // The condition dialog is open: F7 is swallowed, the clicker cannot start and nothing else edits the macro.
         private bool conditionDialogOpen;
@@ -126,7 +135,7 @@ namespace VClicker
         }
 
         /// <summary>The window the macro works in (the indicator goes on its screen); Zero = none.</summary>
-        public IntPtr IndicatorWindow => (recordWindow ?? runWindow ?? captureWindow)?.Handle ?? IntPtr.Zero;
+        public IntPtr IndicatorWindow => (recordWindow ?? runWindow ?? captureWindow ?? analyzingWindow)?.Handle ?? IntPtr.Zero;
 
         internal Macro Current => macro;
 
@@ -163,13 +172,21 @@ namespace VClicker
                 captureIndex = -1;
                 captureWindow = null;
             }
+            if (analyzing != null)
+            {
+                // The read cannot be cancelled; its answer is dropped (and what it holds released) when it comes.
+                analyzing.ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion) (t.Result as IDisposable)?.Dispose(); });
+                analyzing = null;
+                analyzingWindow = null;
+                BringBack();
+            }
             RefreshAll();
         }
 
         /// <summary>The capture hotkey: true when the Studio was waiting for it (the main window then ignores it).</summary>
         public bool OnCaptureHotkey()
         {
-            if (conditionDialogOpen) return true;
+            if (conditionDialogOpen || analyzing != null) return true;
             if (captureIndex < 0) return false;
             int index = captureIndex;
             AppWindow window = captureWindow;
@@ -177,8 +194,7 @@ namespace VClicker
             captureWindow = null;
             if (captureFor != CaptureFor.Point)
             {
-                if (index <= macro.Steps.Count && window != null) CaptureCondition(index, window, captureFor);
-                BringBack();
+                if (index > macro.Steps.Count || window == null || !StartAnalysis(index, window, captureFor)) BringBack();
                 RefreshAll();
                 return true;
             }
@@ -213,18 +229,84 @@ namespace VClicker
             return true;
         }
 
-        /// <summary>F7 for a condition: read what the point offers, ask what to wait for, apply it.</summary>
-        private void CaptureCondition(int index, AppWindow window, CaptureFor mode)
+        private static bool IsTargetMode(CaptureFor mode) => mode == CaptureFor.Target || mode == CaptureFor.Retarget;
+
+        /// <summary>
+        /// F7 for a condition or a target: the point is read off the UI thread, with the app still in front (UI
+        /// Automation reads what is visible there). The Studio stays responsive; <see cref="Tick"/> opens the dialog
+        /// with the answer; F8 drops it. false = refused (the message says why).
+        /// </summary>
+        private bool StartAnalysis(int index, AppWindow window, CaptureFor mode)
         {
-            ConditionProbe probe;
+            bool target = IsTargetMode(mode);
+            IntPtr bound = window.Handle, root;
+            Point screen;
+            Rectangle client = Rectangle.Empty;
+            Bitmap shot = null;
+            bool inside;
             using (MacroTarget.PerMonitorDpi())
             {
                 Native.GetCursorPos(out Native.POINT cursor);
-                probe = MacroConditions.Capture(window.Handle, new Point(cursor.X, cursor.Y));
+                screen = new Point(cursor.X, cursor.Y);
+                root = MacroTarget.RootAt(screen);
+                inside = MacroTarget.Locate(bound, root, screen, out WindowRef where, out _);
+                if (inside && target)
+                {
+                    // Searched where the click was recorded: the same window, never another dialog.
+                    WindowRef recorded = index < macro.Steps.Count ? macro.Steps[index].Window : null;
+                    if (index >= macro.Steps.Count || (where == null ? recorded != null : !where.Matches(recorded)))
+                    {
+                        SetMessage(Loc.T("mmsg.targetOtherWindow"), Theme.Warning);
+                        host?.ErrorBeep();
+                        return false;
+                    }
+                    client = WindowLock.ClientArea(root);
+                    try { shot = SmartTargets.Shoot(client); } // now, before anything on the screen changes
+                    catch (Exception error) when (error is Win32Exception || error is ArgumentException)
+                    {
+                        SetMessage(Loc.F("mmsg.analyzeFailed", settings.CaptureKey), Theme.Warning);
+                        host?.ErrorBeep();
+                        return false;
+                    }
+                }
             }
-            if (probe == null)
+            if (!inside)
             {
                 SetMessage(Loc.F("mmsg.captureOutside", window.DisplayName), Theme.Warning);
+                host?.ErrorBeep();
+                return false;
+            }
+            analyzing = Task.Run(() =>
+            {
+                using (MacroTarget.PerMonitorDpi())
+                    return target ? (object)SmartTargets.Probe(root, screen, client, shot) : MacroConditions.Capture(bound, root, screen);
+            });
+            analyzingIndex = index;
+            analyzingFor = mode;
+            analyzingWindow = window;
+            message = null;
+            return true;
+        }
+
+        /// <summary>The F7 read finished: back to the Studio, and the dialog for what was found.</summary>
+        private void FinishAnalysis()
+        {
+            Task<object> task = analyzing;
+            analyzing = null;
+            analyzingWindow = null;
+            object result = task.Status == TaskStatus.RanToCompletion ? task.Result : null;
+            BringBack();
+            if (IsTargetMode(analyzingFor)) ApplyTarget(analyzingIndex, analyzingFor, result as TargetProbe);
+            else ApplyCondition(analyzingIndex, analyzingFor, result as ConditionProbe);
+            RefreshAll();
+        }
+
+        /// <summary>A condition read: ask what to wait for, apply it.</summary>
+        private void ApplyCondition(int index, CaptureFor mode, ConditionProbe probe)
+        {
+            if (probe == null)
+            {
+                SetMessage(Loc.F("mmsg.analyzeFailed", settings.CaptureKey), Theme.Warning);
                 host?.ErrorBeep();
                 return;
             }
@@ -234,7 +316,6 @@ namespace VClicker
                        : mode == CaptureFor.Convert ? old?.Kind == StepKind.Wait : old?.Kind == StepKind.WaitFor;
             if (!valid) return;
             int timeout = old != null && old.Kind == StepKind.WaitFor ? old.DurationMs : MacroStep.DefaultTimeoutMs;
-            BringBack();
             MacroStep condition;
             conditionDialogOpen = true;
             try
@@ -258,6 +339,55 @@ namespace VClicker
                     break;
             }
             host?.Beep(false);
+        }
+
+        /// <summary>A target read: ask how to recognize it, apply it.</summary>
+        private void ApplyTarget(int index, CaptureFor mode, TargetProbe probe)
+        {
+            using (probe)
+            {
+                if (probe == null)
+                {
+                    SetMessage(Loc.F("mmsg.analyzeFailed", settings.CaptureKey), Theme.Warning);
+                    host?.ErrorBeep();
+                    return;
+                }
+                MacroStep old = index < macro.Steps.Count ? macro.Steps[index] : null;
+                if (old == null || (old.Kind != StepKind.Click && old.Kind != StepKind.DoubleClick) ||
+                    (mode == CaptureFor.Target) != (old.Target == null)) return; // the step changed meanwhile
+                SmartTarget target;
+                conditionDialogOpen = true;
+                try
+                {
+                    using (var dialog = new TargetDialog(probe, old.Target?.TimeoutMs ?? SmartTarget.DefaultTimeoutMs))
+                    {
+                        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                        target = dialog.Result;
+                    }
+                }
+                finally { conditionDialogOpen = false; }
+                ConvertToTarget(index, target);
+                host?.Beep(false);
+            }
+        }
+
+        /// <summary>A click finds its target before clicking; its recorded point and window stay as they are, to go back.</summary>
+        internal void ConvertToTarget(int index, SmartTarget target)
+        {
+            if (index < 0 || index >= macro.Steps.Count) return;
+            MacroStep step = macro.Steps[index];
+            if (step.Kind != StepKind.Click && step.Kind != StepKind.DoubleClick) return;
+            Edit(() => step.Target = target);
+            list.SelectedIndex = index;
+        }
+
+        /// <summary>The click goes back to exactly its recorded point.</summary>
+        internal void RevertTarget(int index)
+        {
+            if (index < 0 || index >= macro.Steps.Count || macro.Steps[index].Target == null) return;
+            MacroStep step = macro.Steps[index];
+            Edit(() => step.Target = null);
+            list.SelectedIndex = index;
         }
 
         /// <summary>A wait becomes a condition; the wait is kept inside it (duration and recorded time) to go back.</summary>
@@ -638,7 +768,8 @@ namespace VClicker
                 button.Enabled = editable;
                 Pair(body, "studio.button", button);
             }
-            if (step.IsMouse)
+            if (step.Target != null && (step.Kind == StepKind.Click || step.Kind == StepKind.DoubleClick)) TargetDetail(body, step, index, editable);
+            else if (step.IsMouse)
             {
                 Pair(body, "X", Coordinate(step.At.X, v => step.At = new Point(v, step.At.Y), editable));
                 Pair(body, "Y", Coordinate(step.At.Y, v => step.At = new Point(step.At.X, v), editable));
@@ -662,6 +793,17 @@ namespace VClicker
                 capture.Click += delegate { BeginCapture(index); };
                 Full(body, capture);
                 Full(body, Note(Loc.T("studio.relative"), Theme.Dim, 8.5f));
+                if (step.Kind == StepKind.Click || step.Kind == StepKind.DoubleClick)
+                {
+                    var smart = new FlatButton
+                    {
+                        Text = Loc.T("studio.toTarget"), Kind = ButtonKind.Secondary, Size = Theme.Sz(220, 30),
+                        Enabled = editable && macro.ExeName.Length > 0, Margin = Theme.Pad(0, 4, 0, 4)
+                    };
+                    smart.Click += delegate { BeginCapture(index, CaptureFor.Target); };
+                    Full(body, smart);
+                    Full(body, Note(Loc.T("studio.toTarget.tip"), Theme.Dim, 8.5f));
+                }
             }
             switch (step.Kind)
             {
@@ -748,6 +890,37 @@ namespace VClicker
                     break;
             }
             detail.ResumeLayout();
+        }
+
+        /// <summary>A click with a target: what it looks for, for how long, and the way back to its recorded point.</summary>
+        private void TargetDetail(TableLayoutPanel body, MacroStep step, int index, bool editable)
+        {
+            if (step.Target.Kind == TargetKind.Image)
+            {
+                Bitmap image = step.Target.Decode();
+                var view = new PixelView { Image = image, Size = Theme.Sz(96, 96), BackColor = Theme.Field };
+                view.Disposed += delegate { image?.Dispose(); };
+                Full(body, view);
+            }
+            NumberField limit = Field(MacroStep.MinTimeoutMs / 1000, MacroStep.MaxTimeoutMs / 1000, step.Target.TimeoutMs / 1000, editable);
+            limit.Unit = "s";
+            limit.ValueChanged += delegate { Edit(() => step.Target.TimeoutMs = limit.Value * 1000, false); };
+            Pair(body, "studio.timeout", limit); // the short label: the detail panel is narrow
+            var repoint = new FlatButton
+            {
+                Text = Loc.T("studio.repoint"), Kind = ButtonKind.Secondary, Size = Theme.Sz(170, 30),
+                Enabled = editable && macro.ExeName.Length > 0, Margin = Theme.Pad(0, 4, 0, 4)
+            };
+            repoint.Click += delegate { BeginCapture(index, CaptureFor.Retarget); };
+            Full(body, repoint);
+            var back = new FlatButton
+            {
+                Text = Loc.F("studio.backToPoint", step.At.X, step.At.Y), Kind = ButtonKind.Secondary, Size = Theme.Sz(240, 30),
+                Enabled = editable, Margin = Theme.Pad(0, 4, 0, 4)
+            };
+            back.Click += delegate { RevertTarget(index); };
+            Full(body, back);
+            Full(body, Note(Loc.F(step.Target.Kind == TargetKind.Image ? "studio.targetImageInfo" : "studio.targetInfo", step.At.X, step.At.Y), Theme.Dim, 8.5f));
         }
 
         private static void Full(TableLayoutPanel body, Control control)
@@ -1242,7 +1415,9 @@ namespace VClicker
             lastBeepSecond = -1;
             message = null;
             if (!player.Start(macro, step => MacroTarget.Check(handle, process, step), CountdownMs,
-                              (step, cancel) => MacroConditions.Read(handle, process, step, cancel)))
+                              (step, cancel) => MacroConditions.Read(handle, process, step, cancel),
+                              (step, cancel) => SmartTargets.Find(handle, process, step, cancel),
+                              (step, look, cancel) => SmartTargets.Confirm(handle, process, step, look, cancel)))
             {
                 runWindow = null;
                 return;
@@ -1259,6 +1434,8 @@ namespace VClicker
             bool fine = reason == MacroStopReason.Completed || reason == MacroStopReason.Manual;
             string text = Loc.F("mstop." + reason, name);
             int at = player.StepIndex;
+            if (reason == MacroStopReason.TargetTimeout && at < macro.Steps.Count && macro.Steps[at].Target != null)
+                text = TargetStopText(macro.Steps[at], player.LastTarget) + " " + Loc.F("mstop.noClick", at + 1);
             if (reason == MacroStopReason.ConditionTimeout && at < macro.Steps.Count)
             {
                 MacroStep step = macro.Steps[at];
@@ -1274,10 +1451,27 @@ namespace VClicker
             SetMessage(text, reason == MacroStopReason.Completed ? Theme.Success : fine ? Theme.Dim : Theme.Warning);
             if (fine) host?.Beep(false);
             else host?.ErrorBeep();
-            if ((reason == MacroStopReason.Password || reason == MacroStopReason.ConditionTimeout) && at < macro.Steps.Count)
+            if ((reason == MacroStopReason.Password || reason == MacroStopReason.ConditionTimeout || reason == MacroStopReason.TargetTimeout) &&
+                at < macro.Steps.Count)
                 list.SelectedIndex = at;
             BringBack();
             RefreshAll();
+        }
+
+        /// <summary>Why a click was not made, from the last look for its target.</summary>
+        internal static string TargetStopText(MacroStep step, TargetLook look)
+        {
+            SmartTarget target = step.Target;
+            string seconds = MacroStep.Seconds(target.TimeoutMs);
+            TargetStatus status = look?.Status ?? TargetStatus.NotFound;
+            int count = look?.Count ?? 0;
+            if (status == TargetStatus.Found) status = TargetStatus.Unconfirmed; // found, but never twice in place and confirmed
+            if (target.Kind == TargetKind.Image)
+            {
+                if (status == TargetStatus.Disabled || status == TargetStatus.Offscreen) status = TargetStatus.NotFound;
+                return Loc.F("mstop.image." + status, seconds, count);
+            }
+            return Loc.F("mstop.target." + status, target.Name, MacroStep.Lower(Loc.ControlTypeLabel(target.ControlType)), seconds, count);
         }
 
         // ------------------------------------------------------------------ capturing a point
@@ -1341,7 +1535,7 @@ namespace VClicker
         private Color StateDot()
         {
             if (recorder != null) return recorder.Paused ? Theme.Warning : Theme.Danger;
-            if (recordStartAt != 0 || captureIndex >= 0) return Theme.Warning;
+            if (recordStartAt != 0 || captureIndex >= 0 || analyzing != null) return Theme.Warning;
             switch (player.Phase)
             {
                 case MacroPhase.Running: return Theme.Success;
@@ -1359,9 +1553,11 @@ namespace VClicker
             if (recorder != null)
                 return recorder.Paused ? Loc.F("mstatus.recPaused", recordWindow.DisplayName)
                                        : Loc.F("mstatus.recording", recordWindow.DisplayName, settings.StopKey);
+            if (analyzing != null) return Loc.T("mstatus.analyzing");
             if (captureIndex >= 0)
                 return captureFor == CaptureFor.Point ? Loc.F("mstatus.capture", captureWindow.DisplayName, settings.CaptureKey)
-                                                      : Loc.F("mstatus.captureCondition", settings.CaptureKey);
+                     : IsTargetMode(captureFor) ? Loc.F("mstatus.captureTarget", settings.CaptureKey)
+                     : Loc.F("mstatus.captureCondition", settings.CaptureKey);
             string app = runWindow?.DisplayName ?? AppName;
             switch (player.Phase)
             {
@@ -1392,6 +1588,8 @@ namespace VClicker
         private static string WatchingText(MacroStep step, TimeSpan watched)
         {
             string seconds = ((int)watched.TotalSeconds).ToString(CultureInfo.CurrentCulture);
+            if (step.Target != null)
+                return step.Target.Kind == TargetKind.Image ? Loc.F("mstatus.findImage", seconds) : Loc.F("mstatus.findElement", step.Target.Name, seconds);
             switch (step.Condition)
             {
                 case ConditionKind.Element: return Loc.F("mstatus.watchElement", step.Text, seconds);
@@ -1400,9 +1598,10 @@ namespace VClicker
             }
         }
 
-        /// <summary>Every 100 ms: countdowns, the status line, the running step, beeps.</summary>
+        /// <summary>Every 100 ms: countdowns, the status line, the running step, beeps, the end of an F7 read.</summary>
         private void Tick()
         {
+            if (analyzing != null && analyzing.IsCompleted && !conditionDialogOpen) FinishAnalysis();
             if (recordStartAt != 0)
             {
                 long left = recordStartAt - Stopwatch.GetTimestamp();
@@ -1584,7 +1783,7 @@ namespace VClicker
                 Text = Loc.T("cond.title");
                 Dialogs.Style(this);
                 var kinds = new List<ConditionKind>();
-                if (probe.ElementName.Length > 0) kinds.Add(ConditionKind.Element);
+                if (probe.ElementName.Length > 0 && probe.ElementCount == 1) kinds.Add(ConditionKind.Element);
                 if (probe.Rgb.HasValue) kinds.Add(ConditionKind.Color);
                 if (probe.Dialog != null) kinds.Add(ConditionKind.Window);
                 ConditionKind preferred = kinds.Contains(ConditionKind.Element) ? ConditionKind.Element
@@ -1649,7 +1848,7 @@ namespace VClicker
                     choice.SelectedChanged += delegate { Show(); };
                     Show();
                     foreach (ConditionKind missing in new[] { ConditionKind.Element, ConditionKind.Color, ConditionKind.Window })
-                        if (!kinds.Contains(missing)) body.Controls.Add(Line(Loc.T("cond.missing." + missing), Theme.Dim, 4));
+                        if (!kinds.Contains(missing)) body.Controls.Add(Line(MissingText(missing, probe), Theme.Dim, 4));
 
                     var limitRow = new FlowLayoutPanel { AutoSize = true, BackColor = Theme.Bg, Margin = Theme.Pad(0, 10, 0, 0), WrapContents = false };
                     limitRow.Controls.Add(new Label
@@ -1675,6 +1874,7 @@ namespace VClicker
                             Window = kind == ConditionKind.Window ? probe.Dialog?.Clone() : probe.Window?.Clone(),
                             ControlType = kind == ConditionKind.Element ? probe.ControlType : string.Empty,
                             Text = kind == ConditionKind.Element ? probe.ElementName : string.Empty,
+                            AutomationId = kind == ConditionKind.Element ? probe.AutomationId : string.Empty,
                             Rgb = kind == ConditionKind.Color ? probe.Rgb.Value : 0
                         };
                         DialogResult = DialogResult.OK;
@@ -1692,11 +1892,203 @@ namespace VClicker
             }
 
             /// <summary>"Botão" for "Button": the control types a person recognizes, in their language.</summary>
-            internal static string TypeLabel(string type)
+            internal static string TypeLabel(string type) => Loc.ControlTypeLabel(type);
+
+            /// <summary>Why a kind of condition is not offered at this point.</summary>
+            private static string MissingText(ConditionKind kind, ConditionProbe probe)
             {
-                string key = "cond.type." + type;
-                string label = Loc.T(key);
-                return label == key ? type : label;
+                if (kind == ConditionKind.Element && probe.ElementName.Length > 0)
+                    return probe.ElementCount > 1
+                        ? Loc.F("cond.missing.ElementMany", probe.ElementCount, MacroStep.Lower(TypeLabel(probe.ControlType)), probe.ElementName)
+                        : Loc.T("cond.missing.ElementUnconfirmed");
+                return Loc.T("cond.missing." + kind);
+            }
+        }
+
+        /// <summary>
+        /// "Smart target": how the V-Clicker will recognize what to click, in plain words, with a preview. By name
+        /// (UI Automation) when the point has a named element that is unique in the window; else by appearance (the
+        /// smallest image region that is unique). The other way stays one click away; Confirm only for a unique one.
+        /// </summary>
+        internal sealed class TargetDialog : Form
+        {
+            public SmartTarget Result;
+
+            public TargetDialog(TargetProbe probe, int timeoutMs)
+            {
+                Text = Loc.T("target.title");
+                Dialogs.Style(this);
+                var body = new TableLayoutPanel
+                {
+                    Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, BackColor = Theme.Bg
+                };
+                Label Line(string text, Color color, int bottom = 8) => new Label
+                {
+                    Text = text, AutoSize = true, ForeColor = color, BackColor = Theme.Bg, UseMnemonic = false,
+                    MaximumSize = new Size(Theme.Dp(440), 0), Margin = Theme.Pad(0, 0, 0, bottom)
+                };
+                var ok = new FlatButton { Text = Loc.T("cond.confirm"), Kind = ButtonKind.Primary, Size = Theme.Sz(120, 32) };
+                var cancel = new FlatButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 32), Margin = Theme.Pad(0, 0, 8, 0) };
+                cancel.Click += delegate { DialogResult = DialogResult.Cancel; };
+
+                bool byName = probe.ElementUsable;
+                List<ImageOption> sizes = probe.Images.Where(o => o.Crop != null).ToList();
+                ImageOption image = probe.FirstImage;
+                bool byLook = image != null;
+                var missing = new List<string>();
+                if (!byName) missing.Add(NameMissing(probe));
+                if (!byLook) missing.Add(Loc.T("target.missing.image"));
+
+                if (!byName && !byLook)
+                {
+                    body.Controls.Add(Line(Loc.T("target.nothing"), Theme.Warning, 12));
+                    ok.Enabled = false;
+                }
+                else
+                {
+                    var choice = new Segmented { Items = new[] { Loc.T("target.byName"), Loc.T("target.byLook") }, Size = Theme.Sz(300, 30), Margin = Theme.Pad(0, 0, 0, 10) };
+                    choice.SelectedIndex = byName ? 0 : 1;
+                    var found = Line(string.Empty, Theme.Text, 6);
+                    found.Font = Theme.Ui(10f, true);
+                    var view = new PixelView { Size = Theme.Sz(240, 110), Margin = Theme.Pad(0, 0, 0, 8), BackColor = Theme.Field };
+                    var verdict = Line(string.Empty, Theme.Success, 6);
+                    var sizeRow = new FlowLayoutPanel { AutoSize = true, BackColor = Theme.Bg, WrapContents = false, Margin = Theme.Pad(0, 0, 0, 6) };
+                    sizeRow.Controls.Add(new Label
+                    {
+                        Text = Loc.T("target.size"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Margin = Theme.Pad(0, 8, 10, 0)
+                    });
+                    var size = new Segmented
+                    {
+                        Items = sizes.Select(o => Loc.T("target.side" + o.Side)).ToArray(), Size = Theme.Sz(80 * Math.Max(1, sizes.Count), 30)
+                    };
+                    if (image != null) size.SelectedIndex = sizes.IndexOf(image);
+                    sizeRow.Controls.Add(size);
+                    var note = Line(string.Empty, Theme.Dim, 8);
+                    body.Controls.Add(Line(Loc.T("target.intro"), Theme.Dim));
+                    body.Controls.Add(found);
+                    body.Controls.Add(view);
+                    body.Controls.Add(verdict);
+                    body.Controls.Add(sizeRow);
+                    body.Controls.Add(note);
+                    if (byName && byLook)
+                    {
+                        body.Controls.Add(Line(Loc.T("target.how"), Theme.Dim, 4));
+                        body.Controls.Add(choice);
+                    }
+
+                    void Show()
+                    {
+                        bool element = byName && choice.SelectedIndex == 0;
+                        sizeRow.Visible = !element;
+                        if (element)
+                        {
+                            found.Text = Loc.F("target.foundElement", ConditionDialog.TypeLabel(probe.Element.ControlType), probe.Element.Name);
+                            view.Image = probe.ElementPreview;
+                            verdict.Text = Loc.T("target.unique");
+                            verdict.ForeColor = Theme.Success;
+                            note.Text = Loc.T("target.elementNote");
+                            ok.Enabled = true;
+                            return;
+                        }
+                        found.Text = Loc.T("target.foundImage");
+                        view.Image = image?.Crop;
+                        verdict.Text = image == null ? string.Empty
+                            : image.Problem == ImageProblem.None ? Loc.T("target.unique") : Loc.F("target.image." + image.Problem, image.Count);
+                        verdict.ForeColor = image?.Problem == ImageProblem.None ? Theme.Success : Theme.Warning;
+                        note.Text = Loc.T("target.imageNote");
+                        ok.Enabled = image?.Problem == ImageProblem.None;
+                    }
+                    choice.SelectedChanged += delegate { Show(); };
+                    size.SelectedChanged += delegate
+                    {
+                        if (size.SelectedIndex >= 0 && size.SelectedIndex < sizes.Count) image = sizes[size.SelectedIndex];
+                        Show();
+                    };
+                    Show();
+                    foreach (string why in missing) body.Controls.Add(Line(why, Theme.Dim, 4));
+                    missing.Clear();
+
+                    var limitRow = new FlowLayoutPanel { AutoSize = true, BackColor = Theme.Bg, Margin = Theme.Pad(0, 10, 0, 0), WrapContents = false };
+                    limitRow.Controls.Add(new Label
+                    {
+                        Text = Loc.T("studio.findTimeout"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Margin = Theme.Pad(0, 8, 10, 0)
+                    });
+                    var limit = new NumberField
+                    {
+                        Minimum = MacroStep.MinTimeoutMs / 1000, Maximum = MacroStep.MaxTimeoutMs / 1000, Size = Theme.Sz(90, 30), Unit = "s"
+                    };
+                    limit.Number = timeoutMs / 1000;
+                    limitRow.Controls.Add(limit);
+                    body.Controls.Add(limitRow);
+
+                    ok.Click += delegate
+                    {
+                        limit.Commit();
+                        if (byName && choice.SelectedIndex == 0)
+                            Result = new SmartTarget
+                            {
+                                Kind = TargetKind.Element, ControlType = probe.Element.ControlType, Name = probe.Element.Name,
+                                AutomationId = probe.Element.AutomationId, TimeoutMs = limit.Value * 1000
+                            };
+                        else if (image != null && image.Problem == ImageProblem.None)
+                            Result = new SmartTarget { Kind = TargetKind.Image, Png = SmartTarget.EncodeImage(image.Crop), TimeoutMs = limit.Value * 1000 };
+                        else return;
+                        DialogResult = DialogResult.OK;
+                    };
+                }
+                foreach (string why in missing) body.Controls.Add(Line(why, Theme.Dim, 4));
+                var buttons = new FlowLayoutPanel
+                {
+                    FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, BackColor = Theme.Bg, Margin = Theme.Pad(0, 16, 0, 0)
+                };
+                buttons.Controls.Add(ok);
+                buttons.Controls.Add(cancel);
+                body.Controls.Add(buttons);
+                Controls.Add(body);
+                KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) DialogResult = DialogResult.Cancel; };
+            }
+
+            /// <summary>Why the element at the point cannot be the target.</summary>
+            private static string NameMissing(TargetProbe probe)
+            {
+                ElementProbe element = probe.Element;
+                if (element == null || element.Name.Length == 0) return Loc.T("target.missing.none");
+                return element.Count > 1
+                    ? Loc.F("target.missing.many", element.Count, MacroStep.Lower(ConditionDialog.TypeLabel(element.ControlType)), element.Name)
+                    : Loc.T("target.missing.unconfirmed");
+            }
+        }
+
+        /// <summary>A bitmap scaled to fit, pixels kept sharp when enlarged (a captured region is small). Does not own the bitmap.</summary>
+        internal sealed class PixelView : Control
+        {
+            private Bitmap image;
+
+            public PixelView()
+            {
+                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+            }
+
+            public Bitmap Image
+            {
+                get => image;
+                set
+                {
+                    image = value;
+                    Invalidate();
+                }
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                if (image == null) return;
+                float scale = Math.Min((float)Width / image.Width, (float)Height / image.Height);
+                if (scale > 1) scale = (float)Math.Floor(scale); // whole multiples keep every pixel square
+                var size = new SizeF(image.Width * scale, image.Height * scale);
+                e.Graphics.InterpolationMode = scale >= 1 ? InterpolationMode.NearestNeighbor : InterpolationMode.HighQualityBicubic;
+                e.Graphics.PixelOffsetMode = PixelOffsetMode.Half;
+                e.Graphics.DrawImage(image, new RectangleF((Width - size.Width) / 2, (Height - size.Height) / 2, size.Width, size.Height));
             }
         }
 

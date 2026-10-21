@@ -87,7 +87,9 @@ namespace VClicker
         /// <summary>The window left the front in the middle of a drag: the button was released and the run ended.</summary>
         Interrupted,
         /// <summary>A "wait until" condition was not met within its time limit: stopped before the next step.</summary>
-        ConditionTimeout
+        ConditionTimeout,
+        /// <summary>A click's target was not found (or not with certainty) within its time limit: stopped before clicking.</summary>
+        TargetTimeout
     }
 
     internal enum MacroPhase { Idle, Countdown, Running, Paused }
@@ -120,6 +122,9 @@ namespace VClicker
         private Macro macro;
         private Func<MacroStep, MacroCheckResult> guard;
         private Func<MacroStep, CancellationToken, ConditionRead> condition;
+        private Func<MacroStep, CancellationToken, TargetLook> locate;
+        private Func<MacroStep, TargetLook, CancellationToken, ConditionRead> confirm;
+        private TargetLook lastTarget;
 
         public const int WatchPollMs = 100;
         /// <summary>Consecutive positive reads before a condition counts as met (one flicker is not enough).</summary>
@@ -149,6 +154,12 @@ namespace VClicker
         /// <summary>A "wait until" step is watching its condition.</summary>
         public bool Watching => Volatile.Read(ref watching) != 0;
 
+        /// <summary>The last look for a click target: why it was not clicked, when the run stops on <see cref="MacroStopReason.TargetTimeout"/>.</summary>
+        public TargetLook LastTarget => Volatile.Read(ref lastTarget);
+
+        /// <summary>Two finds of a target this close (pixels) count as the same place: it is not moving.</summary>
+        public const int StillPx = 2;
+
         /// <summary>How long the current condition has been watched (pauses excluded).</summary>
         public TimeSpan Watched => TimeSpan.FromSeconds((double)Interlocked.Read(ref watchedTicks) / Stopwatch.Frequency);
 
@@ -165,8 +176,12 @@ namespace VClicker
         /// <param name="macro">Copied: editing the macro during a run changes nothing.</param>
         /// <returns>false if a run is already in progress.</returns>
         /// <param name="condition">Reads "wait until" conditions (null: they are never met and time out).</param>
+        /// <param name="locate">Looks for a click's target (null: never found, the step times out).</param>
+        /// <param name="confirm">The last look at a found target right before its click (null: never confirmed).</param>
         public bool Start(Macro macro, Func<MacroStep, MacroCheckResult> guard, int countdownMs = 3000,
-                          Func<MacroStep, CancellationToken, ConditionRead> condition = null)
+                          Func<MacroStep, CancellationToken, ConditionRead> condition = null,
+                          Func<MacroStep, CancellationToken, TargetLook> locate = null,
+                          Func<MacroStep, TargetLook, CancellationToken, ConditionRead> confirm = null)
         {
             lock (gate)
             {
@@ -181,7 +196,10 @@ namespace VClicker
                 CancellationToken runToken = cancel.Token;
                 Volatile.Write(ref phase, (int)MacroPhase.Countdown); // busy before the thread runs
                 Func<MacroStep, CancellationToken, ConditionRead> reader = condition ?? ((s, t) => ConditionRead.NotYet);
-                worker = new Thread(() => Run(copy, guard, reader, countdownMs, runToken))
+                Func<MacroStep, CancellationToken, TargetLook> finder = locate ?? ((s, t) => new TargetLook());
+                Func<MacroStep, TargetLook, CancellationToken, ConditionRead> checker = confirm ?? ((s, l, t) => ConditionRead.NotYet);
+                Volatile.Write(ref lastTarget, null);
+                worker = new Thread(() => Run(copy, guard, reader, finder, checker, countdownMs, runToken))
                 {
                     IsBackground = true,
                     Name = "V-Clicker macro",
@@ -218,11 +236,14 @@ namespace VClicker
         }
 
         private void Run(Macro run, Func<MacroStep, MacroCheckResult> check, Func<MacroStep, CancellationToken, ConditionRead> reader,
+                         Func<MacroStep, CancellationToken, TargetLook> finder, Func<MacroStep, TargetLook, CancellationToken, ConditionRead> checker,
                          int countdownMs, CancellationToken runToken)
         {
             macro = run;
             guard = check;
             condition = reader;
+            locate = finder;
+            confirm = checker;
             token = runToken;
             shift = 0;
             MacroStopReason reason = MacroStopReason.Completed;
@@ -307,8 +328,8 @@ namespace VClicker
                 case StepKind.Click:
                 case StepKind.DoubleClick:
                 {
-                    MacroCheckResult at = Check(step);
-                    Do(sink.MoveTo(at.Screen));
+                    // A target is clicked where it is found now; its recorded point is never used.
+                    Do(sink.MoveTo(step.Target != null ? FindTarget(step) : Check(step).Screen));
                     Press(step.Button);
                     if (step.Kind == StepKind.DoubleClick) Press(step.Button);
                     break;
@@ -367,14 +388,53 @@ namespace VClicker
             }
         }
 
+        /// <summary>A "wait until" step: its condition read "met" twice in a row (one flicker is not enough).</summary>
+        private void WaitFor(MacroStep step) =>
+            Watch(step.DurationMs, MacroStopReason.ConditionTimeout, ConfirmReads, () => condition(step, token));
+
         /// <summary>
-        /// Watches a condition every 100 ms until it reads "met" twice in a row, its time limit runs out, or the run
-        /// stops. Another app in front or on top pauses the watch (that time does not count); a read that comes back
-        /// after a stop is ignored. Nothing is ever sent from here.
+        /// Looks for a click's target until it is found twice at the same place (it is not moving) and the last look
+        /// right before the click confirms it; returns where to click. Stops the run when the time limit runs out.
         /// </summary>
-        private void WaitFor(MacroStep step)
+        private Point FindTarget(MacroStep step)
         {
-            long limit = Ticks(step.DurationMs), settle = Ticks(ClickEngine.ResumeSettleMs), pauseLimit = Ticks(PauseLimitMs);
+            TargetLook previous = null;
+            Point at = Point.Empty;
+            Watch(step.Target.TimeoutMs, MacroStopReason.TargetTimeout, 1, () =>
+            {
+                TargetLook look = locate(step, token);
+                if (look == null) look = new TargetLook { Status = TargetStatus.Inconclusive };
+                Volatile.Write(ref lastTarget, look);
+                if (look.Read != ConditionRead.Met)
+                {
+                    previous = null;
+                    return look.Read;
+                }
+                if (previous == null || Math.Abs(previous.Screen.X - look.Screen.X) > StillPx || Math.Abs(previous.Screen.Y - look.Screen.Y) > StillPx)
+                {
+                    previous = look; // first sight, or it moved: look again
+                    Volatile.Write(ref lastTarget, new TargetLook { Status = TargetStatus.Unconfirmed, Count = 1 });
+                    return ConditionRead.NotYet;
+                }
+                previous = null; // whatever happens next, two new finds are needed
+                if (token.IsCancellationRequested) return ConditionRead.NotYet;
+                ConditionRead last = confirm(step, look, token);
+                if (last == ConditionRead.Met) at = look.Screen;
+                else Volatile.Write(ref lastTarget, new TargetLook { Read = last, Status = TargetStatus.Unconfirmed, Count = 1 });
+                return last;
+            });
+            return at;
+        }
+
+        /// <summary>
+        /// Reads every 100 ms (between the end of one read and the start of the next) until it says "met"
+        /// <paramref name="confirmReads"/> times in a row, the time limit runs out, or the run stops. Another app in
+        /// front or on top pauses the watch (that time does not count); a read that comes back after a stop is
+        /// ignored. Nothing is ever sent from here.
+        /// </summary>
+        private void Watch(int limitMs, MacroStopReason onTimeout, int confirmReads, Func<ConditionRead> read)
+        {
+            long limit = Ticks(limitMs), settle = Ticks(ClickEngine.ResumeSettleMs), pauseLimit = Ticks(PauseLimitMs);
             long spent = 0, last = Stopwatch.GetTimestamp(), pausedSince = 0, ignoreUntil = 0;
             int positives = 0;
             Interlocked.Exchange(ref watchedTicks, 0);
@@ -384,15 +444,15 @@ namespace VClicker
                 while (true)
                 {
                     if (token.IsCancellationRequested) throw new EndRun(Requested);
-                    ConditionRead read = condition(step, token);
+                    ConditionRead result = read();
                     if (token.IsCancellationRequested) throw new EndRun(Requested); // a slow read never outlives a stop
                     long now = Stopwatch.GetTimestamp();
-                    if (read == ConditionRead.Closed) throw new EndRun(MacroStopReason.TargetClosed);
-                    if (read == ConditionRead.Away || read == ConditionRead.Covered)
+                    if (result == ConditionRead.Closed) throw new EndRun(MacroStopReason.TargetClosed);
+                    if (result == ConditionRead.Away || result == ConditionRead.Covered)
                     {
                         if (pausedSince == 0) pausedSince = now;
                         else if (now - pausedSince >= pauseLimit) throw new EndRun(MacroStopReason.PauseTimeout);
-                        Volatile.Write(ref pauseCause, (int)(read == ConditionRead.Away ? MacroCheck.NotFocused : MacroCheck.Covered));
+                        Volatile.Write(ref pauseCause, (int)(result == ConditionRead.Away ? MacroCheck.NotFocused : MacroCheck.Covered));
                         Volatile.Write(ref phase, (int)MacroPhase.Paused);
                         positives = 0;
                     }
@@ -407,9 +467,9 @@ namespace VClicker
                         }
                         else spent += now - last;
                         Interlocked.Exchange(ref watchedTicks, spent);
-                        if (spent >= limit) throw new EndRun(MacroStopReason.ConditionTimeout); // even on a late positive
-                        if (now < ignoreUntil || read != ConditionRead.Met) positives = 0;
-                        else if (++positives >= ConfirmReads) return;
+                        if (spent >= limit) throw new EndRun(onTimeout); // even on a late positive
+                        if (now < ignoreUntil || result != ConditionRead.Met) positives = 0;
+                        else if (++positives >= confirmReads) return;
                     }
                     last = now;
                     if (token.WaitHandle.WaitOne(WatchPollMs)) throw new EndRun(Requested);

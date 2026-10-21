@@ -429,10 +429,11 @@ namespace VClicker.Tests
                             using (MacroTarget.PerMonitorDpi()) return MacroConditions.Read(handle, process, step, CancellationToken.None);
                         });
 
-                        ConditionProbe onButton = OffThread(() => MacroConditions.Capture(handle, Center(button)));
+                        ConditionProbe onButton = OffThread(() => MacroConditions.Capture(handle, MacroTarget.RootAt(Center(button)), Center(button)));
                         True(onButton != null, "the point is in the bound window");
                         Equal("Button", onButton.ControlType, "the button itself, not its text");
                         Equal("Baixar PDF", onButton.ElementName, "its name");
+                        Equal(1, onButton.ElementCount, "the only one in the window");
                         var element = new MacroStep
                         {
                             Kind = StepKind.WaitFor, Condition = ConditionKind.Element, At = onButton.At, ControlType = onButton.ControlType,
@@ -443,7 +444,7 @@ namespace VClicker.Tests
                         Spin(100);
                         Equal(ConditionRead.Met, Read(element), "enabled = available");
 
-                        ConditionProbe onPanel = OffThread(() => MacroConditions.Capture(handle, Center(panel)));
+                        ConditionProbe onPanel = OffThread(() => MacroConditions.Capture(handle, MacroTarget.RootAt(Center(panel)), Center(panel)));
                         True(onPanel.Rgb.HasValue && MacroConditions.Close(onPanel.Rgb.Value, 0x3A6BD1), "panel colour read: " + onPanel.Rgb?.ToString("X6"));
                         var color = new MacroStep { Kind = StepKind.WaitFor, Condition = ConditionKind.Color, At = onPanel.At, Rgb = 0x3A6BD1, DurationMs = 30000 };
                         Equal(ConditionRead.Met, Read(color), "colour met");
@@ -467,6 +468,111 @@ namespace VClicker.Tests
                         dialog.Show(form);
                         Spin(200);
                         Equal(ConditionRead.Met, Read(window), "dialog open");
+                    }
+                });
+
+                Test("smart target: the click finds the button where it moved, by name and by image; two of them are never clicked", () =>
+                {
+                    Rectangle screen = Screen.PrimaryScreen.WorkingArea;
+                    using (var form = new Form
+                    {
+                        Text = "V-Clicker smart target", Size = new Size(380, 360), StartPosition = FormStartPosition.Manual,
+                        TopMost = true, Location = new Point(screen.Right - 440, screen.Top + 40), BackColor = Color.White
+                    })
+                    {
+                        int pdf = 0, csv = 0, twin = 0;
+                        var spacer = new Panel { Dock = DockStyle.Top, Height = 0, BackColor = Color.FromArgb(255, 243, 205) };
+                        var bPdf = new Button { Text = "Baixar PDF", Dock = DockStyle.Top, Height = 40 };
+                        var bCsv = new Button { Text = "Baixar CSV", Dock = DockStyle.Top, Height = 40 };
+                        var bTwin = new Button { Text = "Baixar PDF", Dock = DockStyle.Bottom, Height = 40, Visible = false };
+                        bPdf.Click += delegate { pdf++; };
+                        bCsv.Click += delegate { csv++; };
+                        bTwin.Click += delegate { twin++; };
+                        form.Controls.Add(bTwin);
+                        form.Controls.Add(bPdf); // from the top: spacer, CSV, PDF
+                        form.Controls.Add(bCsv);
+                        form.Controls.Add(spacer);
+                        form.Show();
+                        form.Activate();
+                        Spin(300);
+                        IntPtr handle = form.Handle;
+                        uint process = MacroTarget.ProcessOf(handle);
+
+                        T OffThread<T>(Func<T> read)
+                        {
+                            var task = System.Threading.Tasks.Task.Run(read);
+                            Stopwatch wait = Stopwatch.StartNew();
+                            while (!task.IsCompleted && wait.ElapsedMilliseconds < 10000) { Application.DoEvents(); Thread.Sleep(0); }
+                            True(task.IsCompleted, "read finished");
+                            return task.Result;
+                        }
+                        Point Center(Control c)
+                        {
+                            Rectangle r = c.RectangleToScreen(c.ClientRectangle);
+                            return new Point(r.Left + r.Width / 2, r.Top + r.Height / 2);
+                        }
+                        MacroStopReason Run(SmartTarget target, Point recorded, out TargetLook last)
+                        {
+                            var macro = new Macro { Repeat = 1 };
+                            macro.Steps.Add(new MacroStep { Kind = StepKind.Click, At = recorded, Target = target });
+                            MacroStopReason? reason = null;
+                            using (var player = new MacroPlayer(new SendInputInputSink()))
+                            {
+                                player.Stopped += r => reason = r;
+                                True(player.Start(macro, s => MacroTarget.Check(handle, process, s), 0,
+                                    locate: (s, c) => SmartTargets.Find(handle, process, s, c),
+                                    confirm: (s, l, c) => SmartTargets.Confirm(handle, process, s, l, c)), "started");
+                                Stopwatch watch = Stopwatch.StartNew();
+                                // UI Automation into our own window: answer its messages at once, like a real app's loop.
+                                while (player.Phase != MacroPhase.Idle && watch.ElapsedMilliseconds < 30000) { Application.DoEvents(); Thread.Sleep(0); }
+                                Spin(200);
+                                last = player.LastTarget;
+                            }
+                            return reason.Value;
+                        }
+
+                        Point pointed = Center(bPdf);
+                        Rectangle client = WindowLock.ClientArea(handle);
+                        TargetProbe probe;
+                        using (MacroTarget.PerMonitorDpi())
+                        {
+                            Bitmap shot = SmartTargets.Shoot(client);
+                            probe = OffThread(() => SmartTargets.Probe(handle, pointed, client, shot));
+                        }
+                        using (probe)
+                        {
+                            True(probe.ElementUsable, "the button by name, unique in the window");
+                            Equal("Baixar PDF", probe.Element.Name, "its name");
+                            True(probe.ElementPreview != null, "with a picture of it");
+                            True(probe.FirstImage != null, "and by appearance: " + string.Join(", ", probe.Images.Select(o => o.Side + "=" + o.Problem)));
+                            var byName = new SmartTarget { Kind = TargetKind.Element, ControlType = probe.Element.ControlType, Name = probe.Element.Name, TimeoutMs = 10000 };
+                            var byLook = new SmartTarget { Kind = TargetKind.Image, Png = SmartTarget.EncodeImage(probe.FirstImage.Crop), TimeoutMs = 10000 };
+
+                            // A warning bar pushes the buttons down: the old point now falls on "Baixar CSV".
+                            spacer.Height = 40;
+                            form.Activate();
+                            Spin(300);
+                            True(bCsv.RectangleToScreen(bCsv.ClientRectangle).Contains(pointed), "the recorded point is now on the other button");
+                            MacroStopReason byNameReason = Run(byName, probe.At, out TargetLook seen);
+                            Equal(MacroStopReason.Completed, byNameReason, "by name (last look: " + seen?.Status + " " + seen?.Read + " " + seen?.Screen + ")");
+                            Equal(1, pdf, "the PDF button was clicked where it is now");
+                            Equal(0, csv, "never the button at the old point");
+
+                            spacer.Height = 20;
+                            form.Activate();
+                            Spin(300);
+                            MacroStopReason byLookReason = Run(byLook, probe.At, out seen);
+                            Equal(MacroStopReason.Completed, byLookReason, "by appearance (last look: " + seen?.Status + " " + seen?.Read + " " + seen?.Screen + ")");
+                            Equal(2, pdf, "found by its image too");
+                            Equal(0, csv, "still never the other button");
+
+                            bTwin.Visible = true;
+                            form.Activate();
+                            Spin(300);
+                            Equal(MacroStopReason.TargetTimeout, Run(byName, probe.At, out TargetLook last), "two buttons with that name");
+                            Equal(TargetStatus.Ambiguous, last.Status, "ambiguous");
+                            Equal(2, pdf + twin, "neither was clicked");
+                        }
                     }
                 });
 
@@ -540,6 +646,18 @@ namespace VClicker.Tests
                             True(!studio.Busy, "the run ended");
                             Equal(2, clicks, "the macro clicked the button again");
                             Equal("OiOi", box.Text, "and typed the text again");
+
+                            // The same run with the first click as a smart target, through the Studio's own Run.
+                            int first = studio.Current.Steps.FindIndex(s => s.Kind == StepKind.Click);
+                            studio.ConvertToTarget(first, new SmartTarget { Kind = TargetKind.Element, ControlType = "Button", Name = "Baixar PDF" });
+                            studio.Current.Steps[first].At = new Point(-5000, -5000); // the recorded point is never used
+                            studio.BeginRun();
+                            watch.Restart();
+                            // UI Automation into our own window: answer its messages at once, like a real app's loop.
+                            while (studio.Busy && watch.ElapsedMilliseconds < 30000) { Application.DoEvents(); Thread.Sleep(0); }
+                            True(!studio.Busy, "the targeted run ended");
+                            Equal(3, clicks, "the target was found and clicked by name");
+                            Equal("OiOiOi", box.Text, "and the rest of the macro ran");
                             studio.Dispose(); // unsaved on purpose: closing would ask to save
                         }
                     }

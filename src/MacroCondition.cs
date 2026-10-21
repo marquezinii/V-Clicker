@@ -32,6 +32,9 @@ namespace VClicker
         public int? Rgb;
         /// <summary>The dialog under the point (null = the point is in the bound window itself).</summary>
         public WindowRef Dialog;
+        /// <summary>Elements like it in the window (1 = unique); the automation id when it was needed to tell them apart.</summary>
+        public int ElementCount;
+        public string AutomationId = string.Empty;
     }
 
     /// <summary>
@@ -41,9 +44,6 @@ namespace VClicker
     internal static class MacroConditions
     {
         public const int ColorTolerance = 24;
-        public const int ReadTimeoutMs = 500;
-        /// <summary>F7 has no hurry, and the first UI Automation call in a session can take over half a second.</summary>
-        public const int CaptureTimeoutMs = 3000;
         private const int Half = 2; // 5x5 pixels around the point
 
         [DllImport("user32.dll")]
@@ -55,27 +55,24 @@ namespace VClicker
         [DllImport("gdi32.dll")]
         private static extern uint GetPixel(IntPtr dc, int x, int y);
 
-        // Controls a person waits for; plain text inside them leads up to them.
-        private static readonly ControlType[] Interactive =
+        /// <summary>
+        /// The F7 look, off the UI thread: everything a condition at this point could watch, read while the app is
+        /// still in front.
+        /// </summary>
+        /// <param name="root">The top-level window under the point, already checked to be the bound window's.</param>
+        public static ConditionProbe Capture(IntPtr bound, IntPtr root, Point screen)
         {
-            ControlType.Button, ControlType.Hyperlink, ControlType.Edit, ControlType.CheckBox, ControlType.RadioButton,
-            ControlType.ComboBox, ControlType.MenuItem, ControlType.TabItem, ControlType.ListItem, ControlType.SplitButton
-        };
-
-        /// <summary>The F7 look: everything a condition at this point could watch. null = not the bound window's.</summary>
-        public static ConditionProbe Capture(IntPtr bound, Point screen)
-        {
-            IntPtr root = MacroTarget.RootAt(screen);
             if (!MacroTarget.Locate(bound, root, screen, out WindowRef window, out Point at)) return null;
             var probe = new ConditionProbe { At = at, Window = window, Dialog = window != null && !window.IsMenu ? window : null };
-            // ponytail: blocks the Studio up to 3 s if the app does not answer UI Automation; F7 is a one-off, user-started action.
-            Tuple<string, string> element = WithTimeout(() => ElementAt(screen, MacroTarget.ProcessOf(bound)), null, CaptureTimeoutMs, CancellationToken.None);
+            probe.Rgb = ReadColor(root, screen); // first: the colour as the user saw it when pressing F7
+            ElementProbe element = SmartTargets.ProbeElement(root, screen);
             if (element != null)
             {
-                probe.ControlType = element.Item1;
-                probe.ElementName = element.Item2;
+                probe.ControlType = element.ControlType;
+                probe.ElementName = element.Name;
+                probe.ElementCount = element.Count;
+                probe.AutomationId = element.AutomationId;
             }
-            probe.Rgb = ReadColor(root, screen);
             return probe;
         }
 
@@ -91,31 +88,37 @@ namespace VClicker
             // The point's own window (the app's dialog) not open yet, or the point outside it: "not yet".
             IntPtr anchor = MacroTarget.FindAnchor(bound, step.Window);
             if (anchor == IntPtr.Zero) return ConditionRead.NotYet;
+            if (step.Condition == ConditionKind.Element) return ReadElement(anchor, process, step, cancel);
             Rectangle client = WindowLock.ClientArea(anchor);
             var screen = new Point(client.X + step.At.X, client.Y + step.At.Y);
             var area = new Rectangle(screen.X - Half, screen.Y - Half, 2 * Half + 1, 2 * Half + 1);
             if (!client.Contains(area)) return ConditionRead.NotYet;
             ConditionRead cover = Cover(anchor, process, area);
             if (cover != ConditionRead.Met) return cover;
-
-            if (step.Condition == ConditionKind.Element)
-            {
-                // Only one read at a time: against an app that hangs, polls do not pile up threads.
-                if (inFlight != null && !inFlight.IsCompleted) return ConditionRead.NotYet;
-                Tuple<string, string> element = WithTimeout(() => AvailableElementAt(screen, process), null, ReadTimeoutMs, cancel, track: true);
-                return element != null && element.Item1 == step.ControlType && element.Item2 == step.Text
-                    ? ConditionRead.Met : ConditionRead.NotYet;
-            }
             int? rgb = ReadColor(anchor, screen);
             if (rgb == null || Cover(anchor, process, area) != ConditionRead.Met) return ConditionRead.NotYet; // covered meanwhile
             return Close(rgb.Value, step.Rgb) ? ConditionRead.Met : ConditionRead.NotYet;
         }
 
         /// <summary>
+        /// Element: exactly one available element with this type and name (and id) anywhere in the window, through
+        /// the same search as a click target (Smart Target), and not covered at its centre.
+        /// </summary>
+        private static ConditionRead ReadElement(IntPtr anchor, uint process, MacroStep step, CancellationToken cancel)
+        {
+            TargetLook found = WithTimeout(() => SmartTargets.FindElement(anchor, step.ControlType, step.Text, step.AutomationId),
+                                           null, SmartTargets.SearchTimeoutMs, cancel);
+            if (found == null || found.Status != TargetStatus.Found) return ConditionRead.NotYet;
+            var area = new Rectangle(found.Screen.X - Half, found.Screen.Y - Half, 2 * Half + 1, 2 * Half + 1);
+            if (!WindowLock.ClientArea(anchor).Contains(area)) return ConditionRead.NotYet;
+            return Cover(anchor, process, area);
+        }
+
+        /// <summary>
         /// Met when the window under the area's centre and corners is <paramref name="anchor"/>. Something of the
         /// app itself on top is "not yet"; another program on top pauses.
         /// </summary>
-        private static ConditionRead Cover(IntPtr anchor, uint process, Rectangle area)
+        internal static ConditionRead Cover(IntPtr anchor, uint process, Rectangle area)
         {
             foreach (Point p in Probes(area))
             {
@@ -163,42 +166,6 @@ namespace VClicker
             finally { ReleaseDC(IntPtr.Zero, dc); }
         }
 
-        /// <summary>
-        /// The element a person means at the point: the interactive control (the button, not the text inside it,
-        /// up to 3 levels up), else the first element with a name. Only elements of <paramref name="process"/>.
-        /// (control type, name), or null.
-        /// </summary>
-        private static Tuple<string, string> ElementAt(Point screen, uint process) => Resolve(screen, process, false);
-
-        /// <summary>Like <see cref="ElementAt"/>, and only if it is enabled and on the screen.</summary>
-        private static Tuple<string, string> AvailableElementAt(Point screen, uint process) => Resolve(screen, process, true);
-
-        private static Tuple<string, string> Resolve(Point screen, uint process, bool mustBeAvailable)
-        {
-            AutomationElement element = AutomationElement.FromPoint(new System.Windows.Point(screen.X, screen.Y));
-            AutomationElement named = null, chosen = null;
-            for (int depth = 0; depth <= 3 && element != null; depth++)
-            {
-                AutomationElement.AutomationElementInformation info = element.Current;
-                if (info.ProcessId != process) return null; // never someone else's element
-                if (info.Name.Length > 0)
-                {
-                    if (Array.IndexOf(Interactive, info.ControlType) >= 0)
-                    {
-                        chosen = element;
-                        break;
-                    }
-                    if (named == null) named = element;
-                }
-                element = TreeWalker.ControlViewWalker.GetParent(element);
-            }
-            chosen = chosen ?? named;
-            if (chosen == null) return null;
-            AutomationElement.AutomationElementInformation current = chosen.Current;
-            if (mustBeAvailable && (!current.IsEnabled || current.IsOffscreen)) return null;
-            return Tuple.Create(TypeName(current.ControlType), Normalize(current.Name));
-        }
-
         /// <summary>One kind of line break, so a multi-line name survives the file (which keeps only \n).</summary>
         internal static string Normalize(string name) => name.Replace("\r\n", "\n").Replace('\r', '\n');
 
@@ -211,20 +178,27 @@ namespace VClicker
         }
 
         /// <summary>
-        /// Runs a UI Automation read with a time limit. A late answer is thrown away (it can never move a macro on);
-        /// a failure counts as no answer.
+        /// Runs a slow screen read (UI Automation, a screenshot) off the calling thread with a time limit. A late
+        /// answer is thrown away (it can never move a macro on); a failure counts as no answer. Only one read runs at
+        /// a time in the whole program: while an abandoned one is still running (an app that hangs), new reads get
+        /// the fallback at once instead of piling up threads.
         /// </summary>
-        private static T WithTimeout<T>(Func<T> read, T fallback, int timeoutMs, CancellationToken cancel, bool track = false) where T : class
+        internal static T WithTimeout<T>(Func<T> read, T fallback, int timeoutMs, CancellationToken cancel)
         {
-            Task<T> task = Task.Run(() =>
+            Task<T> task;
+            lock (gate)
             {
-                try
+                if (inFlight != null && !inFlight.IsCompleted) return fallback;
+                task = Task.Run(() =>
                 {
-                    using (MacroTarget.PerMonitorDpi()) return read(); // the points are physical pixels
-                }
-                catch (Exception) { return fallback; } // the element went away, or the app does not answer
-            });
-            if (track) inFlight = task;
+                    try
+                    {
+                        using (MacroTarget.PerMonitorDpi()) return read(); // the points are physical pixels
+                    }
+                    catch (Exception) { return fallback; } // the element went away, or the app does not answer
+                });
+                inFlight = task;
+            }
             try
             {
                 return task.Wait(timeoutMs, cancel) ? task.Result : fallback;
@@ -235,6 +209,7 @@ namespace VClicker
             }
         }
 
+        private static readonly object gate = new object();
         private static Task inFlight;
     }
 }
