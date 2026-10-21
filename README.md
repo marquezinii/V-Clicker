@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="assets/icon-256.png" width="128" alt="Ícone do V-Clicker">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/logo-horizontal-color.png">
+  <img src="assets/brand/logo-horizontal-navy.png" width="440" alt="V-Clicker">
+</picture>
 
 # V-Clicker
 
@@ -94,7 +97,7 @@ src/             o aplicativo (WinForms, .NET Framework 4.8, sem dependências d
   MainForm.cs      janela principal;  Controls.cs / Theme.cs  controles e tema escuros
   Loc.cs           textos em português e inglês
 tests/           executor de testes sem dependências (99 testes unitários + 8 de integração)
-assets/          ícone oficial
+assets/          ícone do app e identidade visual (assets/brand: logos, símbolo e wordmarks)
 docs/            capturas de tela
 ```
 

@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- New official brand: app icon (window, taskbar, tray, `.exe`), README logo (light and dark), social preview, and the
+  brand kit in `assets/brand`.
+
 ### Added
 - **Smart Target** (macro clicks that find what to click): a recorded click can carry a target, recognized at F7 by
   name (UI Automation control type and name, plus the automation id only when needed to tell two apart) or by
