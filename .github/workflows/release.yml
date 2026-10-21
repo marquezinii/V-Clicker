@@ -1,0 +1,43 @@
+name: Release
+
+# Publishes a GitHub release when a version tag is pushed:
+#   git tag v1.0.0 && git push origin v1.0.0
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Tag must match the project version
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content src/VClicker.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match <Version>$version</Version> in src/VClicker.csproj."
+          }
+
+      - name: Build, test and package
+        shell: pwsh
+        run: ./build.ps1 -Test -Package
+
+      - name: Create the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME `
+            dist/V-Clicker.exe dist/V-Clicker.exe.sha256 `
+            (Get-ChildItem dist/*.zip) (Get-ChildItem dist/*.zip.sha256) `
+            --title "V-Clicker $env:GITHUB_REF_NAME" --generate-notes

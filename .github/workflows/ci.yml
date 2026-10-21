@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build and run unit tests
+        shell: pwsh
+        run: ./build.ps1 -Test -Package
+
+      - name: Upload the executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: V-Clicker
+          path: |
+            dist/V-Clicker.exe
+            dist/*.sha256
+          if-no-files-found: error
