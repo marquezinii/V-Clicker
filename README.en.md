@@ -22,6 +22,7 @@ A single `.exe`: no installer, no telemetry, no network.
 - **Real speed** – intervals from **1 ms** up to 24 h (up to ~1000 clicks/s, depending on the target program), using an absolute schedule that never accumulates lag plus a high-resolution wait.
 - **Speed in CPS** (clicks per second, one decimal) or as an **interval in h / min / s / ms**: both edit the same speed, with no rounding (15 CPS = 66.667 ms). Presets `5`, `10`, `15`, `20` and `50 CPS`.
 - **Window Lock**: pick an app (e.g. Roblox) and V-Clicker only clicks while it is in front. On Alt+Tab it **pauses and resumes by itself** when you come back (or stops, if you prefer). F6 only starts with the app in front; the *Start* button brings it to the front. It stops for good if the window closes, if a pause lasts over 5 minutes, or if the PC is locked or goes to sleep.
+- **Macro Studio** (its own window, button at the top): click *Record*, choose the app and do the task once. Every click, key, text and wait becomes a plain-language step (`Click (left) at 812, 440`, `Wait 8 s`, `Type "Report"`) that you can edit, save and repeat N times or until you stop it. A macro only acts on the window it was recorded in (and its dialogs): if another window comes to the front, it pauses; F8 stops everything at once. Long waits can be shortened, always with your confirmation and with the recorded time kept. Password fields are not recorded, and running stops at that point. In browsers, switching tabs inside the same window is not detected.
 - **Random variation** (±0–50 %) for less mechanical clicking.
 - **Left, middle or right button**, **single or double** click.
 - **Repeat forever or N times** (up to 1 billion); it stops by itself when done.
@@ -81,12 +82,14 @@ Requires the [.NET SDK](https://dotnet.microsoft.com/download) (any current vers
 src/             the app (WinForms, .NET Framework 4.8, no third-party dependencies)
   ClickEngine.cs   click loop on a dedicated thread (timing, jitter, hold mode, Window Lock pause)
   WindowLock.cs    Windows windows for Window Lock (list, focus, window area);  WindowPicker.cs  app chooser
+  Macro*.cs        Macro Studio: .vcmacro format, recorder (hooks only while recording), step rules,
+                   bound window, player with a check before every step, and the Studio window
   Hud.cs           on-screen indicator (separate window, click-through, never takes focus)
   Hotkey.cs        global hotkeys (RegisterHotKey) and validation
   Settings.cs      .ini settings with validation and a safe fallback
   MainForm.cs      main window;  Controls.cs / Theme.cs  dark controls and theme
   Loc.cs           Portuguese and English strings
-tests/           dependency-free test runner (61 unit tests + 4 integration tests)
+tests/           dependency-free test runner (88 unit tests + 6 integration tests)
 assets/          official icon
 docs/            screenshots
 ```

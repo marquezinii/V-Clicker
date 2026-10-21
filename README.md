@@ -22,6 +22,7 @@ Um único `.exe`, sem instalador, sem telemetria, sem rede.
 - **Velocidade de verdade** – intervalo de **1 ms** até 24 h (até ~1000 cliques/s, dependendo do programa-alvo), com agenda absoluta que não acumula atraso e espera de alta resolução.
 - **Velocidade em CPS** (cliques por segundo, com uma casa decimal) ou **intervalo em h / min / s / ms**: os dois editam a mesma velocidade, sem arredondar (15 CPS = 66,667 ms). Atalhos `5`, `10`, `15`, `20` e `50 CPS`.
 - **Window Lock**: escolha um aplicativo (ex.: Roblox) e o V-Clicker só clica com ele em primeiro plano. Num Alt+Tab, **pausa e retoma sozinho** quando você volta (ou para, se preferir). F6 só começa com o aplicativo na frente; o botão *Iniciar* o traz para a frente. Para de vez se a janela fechar, se a pausa passar de 5 minutos ou se o PC for bloqueado ou suspenso.
+- **Macro Studio** (janela própria, botão no topo): clique em *Gravar*, escolha o aplicativo e faça a tarefa uma vez. Cada clique, tecla, texto e espera vira um passo em português (`Clicar (esquerdo) em 812, 440`, `Esperar 8 s`, `Digitar "Relatório"`), que você edita, salva e repete N vezes ou até parar. A macro só age na janela em que foi gravada (e nos diálogos dela): se outra janela vier para a frente, ela pausa; F8 para tudo na hora. Esperas longas podem ser encurtadas, sempre com a sua confirmação e com o tempo gravado guardado. Campos de senha não são gravados, e a execução para nesse ponto. Em navegadores, a troca de aba dentro da mesma janela não é detectada.
 - **Variação aleatória** (±0–50 %) para cliques menos mecânicos.
 - **Botão esquerdo, do meio ou direito**, clique **simples ou duplo**.
 - **Repetir para sempre ou N vezes** (até 1 bilhão), parando sozinho ao terminar.
@@ -82,11 +83,13 @@ src/             o aplicativo (WinForms, .NET Framework 4.8, sem dependências d
   ClickEngine.cs   laço de cliques em thread dedicada (cronometragem, jitter, modo segurar, pausa do Window Lock)
   WindowLock.cs    janelas do Windows para o Window Lock (lista, foco, área da janela);  WindowPicker.cs  escolha do app
   Hud.cs           indicador na tela (janela separada, transparente a cliques, nunca recebe foco)
+  Macro*.cs        Macro Studio: formato .vcmacro, gravador (ganchos só durante a gravação), regras de passos,
+                   janela vinculada, player com proteção a cada passo, e a janela do Studio
   Hotkey.cs        atalhos globais (RegisterHotKey) e validação
   Settings.cs      configurações em .ini, com validação e fallback seguro
   MainForm.cs      janela principal;  Controls.cs / Theme.cs  controles e tema escuros
   Loc.cs           textos em português e inglês
-tests/           executor de testes sem dependências (61 testes unitários + 4 de integração)
+tests/           executor de testes sem dependências (88 testes unitários + 6 de integração)
 assets/          ícone oficial
 docs/            capturas de tela
 ```

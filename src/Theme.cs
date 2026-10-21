@@ -38,6 +38,18 @@ namespace VClicker
             return font;
         }
 
+        /// <summary>Monochrome symbols (the step icons of the Macro Studio).</summary>
+        public static Font UiSymbol(float points)
+        {
+            string key = points.ToString("0.##") + "y";
+            if (!Fonts.TryGetValue(key, out Font font))
+            {
+                font = new Font("Segoe UI Symbol", points, FontStyle.Regular, GraphicsUnit.Point);
+                Fonts[key] = font;
+            }
+            return font;
+        }
+
         /// <summary>The first opaque background color found walking up the parents (for painting rounded corners).</summary>
         public static Color Backdrop(Control control)
         {

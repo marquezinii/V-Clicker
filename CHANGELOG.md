@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Macro Studio**: record a task once in one app window, see it as plain-language steps (click, double click, drag,
+  hover, scroll, type, key, shortcut, wait), edit them with undo/redo, save them as `.vcmacro` files and repeat them
+  N times or until stopped. Macros are bound to the recorded window (plus its dialogs and menus): another window in
+  front pauses the run, a closed window stops it, F8 stops at once and releases every key and button. Waits are
+  recorded faithfully; long ones can be shortened only after you confirm, and restored. Password fields are never
+  recorded and stop the run. Typed text keeps Shift, AltGr and accents (ABNT2). Clicks are relative to the window,
+  so moving it does not break the macro. Works with the on-screen indicator off (status line, beeps, tray).
 - **Window Lock**: restrict clicks to one app. Pauses on Alt+Tab and resumes when the app is back (or stops, if set);
   F6 only starts with the app in front, the Start button brings it to the front. Stops for good when the window
   closes, after 5 minutes paused, or when the PC is locked or suspended. The chosen app (executable) is remembered.

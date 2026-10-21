@@ -45,6 +45,8 @@ namespace VClicker
         private Label lockAppLabel;
         private FlatButton lockChoose;
         private LinkLabel adminLink;
+        private FlatButton studioButton;
+        private MacroStudio studio;
 
         // Window Lock: the exact window this run is bound to (Zero = no lock).
         private IntPtr lockedWindow;
@@ -273,6 +275,7 @@ namespace VClicker
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             Control header = BuildHeader();
+            header.TabIndex = 10; // the settings come first in the tab order; the Macro Studio button after them
             root.Controls.Add(header, 0, 0);
             root.SetColumnSpan(header, 2);
             root.Controls.Add(BuildLeftColumn(), 0, 1);
@@ -291,7 +294,7 @@ namespace VClicker
                 logo = new Bitmap(decoded); // GDI+ needs the source stream open for the life of a stream-backed Bitmap
             Disposed += delegate { logo.Dispose(); };
 
-            var header = Table("auto", "100%", "auto");
+            var header = Table("auto", "100%", "auto", "auto");
             header.BackColor = Theme.Bg;
             header.Margin = Theme.Pad(0, 0, 0, 14);
 
@@ -322,7 +325,18 @@ namespace VClicker
             };
             segLanguage.AccessibleName = "Language";
 
-            Row(header, mark, titles, segLanguage);
+            studioButton = new FlatButton
+            {
+                Kind = ButtonKind.Secondary, Size = Theme.Sz(124, 28), Anchor = AnchorStyles.Right, Margin = Theme.Pad(0, 0, 10, 0)
+            };
+            Localize(() =>
+            {
+                studioButton.Text = Loc.T("studio.open");
+                tips.SetToolTip(studioButton, Loc.T("studio.open.tip"));
+            });
+            studioButton.Click += delegate { OpenStudio(); };
+
+            Row(header, mark, titles, studioButton, segLanguage);
             return header;
         }
 
@@ -1005,7 +1019,30 @@ namespace VClicker
             Loc.SetLanguage(settings.Language);
             SaveSettings();
             ApplyLanguage();
+            if (studio != null && !studio.IsDisposed) studio.ApplyLanguage();
         }
+
+        // ------------------------------------------------------------------ macro studio
+
+        internal MacroStudio OpenStudio()
+        {
+            if (studio == null || studio.IsDisposed)
+            {
+                studio = new MacroStudio(this, settings, settingsPath);
+                studio.FormClosed += delegate { studio = null; };
+                studio.Show();
+            }
+            else
+            {
+                if (studio.WindowState == FormWindowState.Minimized) studio.WindowState = FormWindowState.Normal;
+                studio.Activate();
+            }
+            return studio;
+        }
+
+        private bool StudioBusy => studio != null && !studio.IsDisposed && studio.Busy;
+
+        internal bool ClickerBusy => engine.Phase != EnginePhase.Idle;
 
         // ------------------------------------------------------------------ run control
 
@@ -1018,6 +1055,12 @@ namespace VClicker
         private void StartClicking(bool fromHotkey)
         {
             if (engine.Phase != EnginePhase.Idle) return;
+            if (StudioBusy)
+            {
+                hudArmed = true;
+                Refuse(Loc.T("mmsg.studioBusy"), Loc.T("mmsg.studioBusy"));
+                return;
+            }
             ReadUi();
             SaveSettings();
 
@@ -1124,14 +1167,19 @@ namespace VClicker
 
         private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
         {
-            if (e.Mode == PowerModes.Suspend) engine.Stop(StopReason.Suspended);
+            if (e.Mode != PowerModes.Suspend) return;
+            engine.Stop(StopReason.Suspended);
+            studio?.StopAll(MacroStopReason.Suspended);
         }
 
         private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
         {
             if (e.Reason == SessionSwitchReason.SessionLock || e.Reason == SessionSwitchReason.ConsoleDisconnect ||
                 e.Reason == SessionSwitchReason.RemoteDisconnect)
+            {
                 engine.Stop(StopReason.Suspended);
+                studio?.StopAll(MacroStopReason.Suspended);
+            }
         }
 
         private void OnEngineStopped(StopReason reason)
@@ -1200,7 +1248,7 @@ namespace VClicker
             RefreshStats();
         }
 
-        private void Beep(bool starting)
+        internal void Beep(bool starting)
         {
             if (!settings.Sounds) return;
             uint frequency = starting ? 880u : 520u;
@@ -1209,7 +1257,7 @@ namespace VClicker
         }
 
         /// <summary>Lower and longer than the stop beep: "this did not do what you expected".</summary>
-        private void ErrorBeep()
+        internal void ErrorBeep()
         {
             if (!settings.Sounds) return;
             System.Threading.ThreadPool.QueueUserWorkItem(delegate { Native.Beep(330, 220); });
@@ -1299,8 +1347,14 @@ namespace VClicker
                 {
                     // While a dialog of ours is open (the app picker) only Stop works: nothing may start under it.
                     case IdToggle: if (Enabled || engine.Phase != EnginePhase.Idle) Toggle(true); break;
-                    case IdStop: engine.Stop(); break;
-                    case IdCapture: if (Enabled) CapturePosition(); break;
+                    case IdStop:
+                        engine.Stop();
+                        studio?.StopAll(MacroStopReason.Manual);
+                        break;
+                    case IdCapture:
+                        if (studio != null && studio.OnCaptureHotkey()) break; // the Studio was waiting for it
+                        if (Enabled) CapturePosition();
+                        break;
                 }
                 return;
             }
@@ -1384,8 +1438,15 @@ namespace VClicker
         {
             Icon icon = phase == EnginePhase.Clicking ? trayClicking
                       : phase == EnginePhase.Idle ? Icon : trayPaused;
-            if (tray.Icon != icon) tray.Icon = icon;
             string text = phase == EnginePhase.Idle ? "V-Clicker" : "V-Clicker - " + badge.Text;
+            Tuple<Color, string> macro = phase == EnginePhase.Idle ? studio?.Indicator : null;
+            if (macro != null && macro.Item1 != Theme.Dim)
+            {
+                // Recording or running a macro: green while it acts, amber while it waits.
+                icon = macro.Item1 == Theme.Warning ? trayPaused : trayClicking;
+                text = "V-Clicker - " + macro.Item2;
+            }
+            if (tray.Icon != icon) tray.Icon = icon;
             if (text.Length > 63) text = text.Substring(0, 62) + "\u2026"; // NotifyIcon tooltip limit
             if (tray.Text != text) tray.Text = text;
         }
@@ -1401,6 +1462,16 @@ namespace VClicker
 
         private void UpdateHud(EnginePhase phase)
         {
+            Tuple<Color, string> macro = phase == EnginePhase.Idle ? studio?.Indicator : null;
+            if (macro != null && settings.Hud)
+            {
+                IntPtr window = studio.IndicatorWindow;
+                if (hud == null || hud.IsDisposed) hud = new Hud();
+                Rectangle screen = window != IntPtr.Zero ? Screen.FromHandle(window).Bounds : Screen.PrimaryScreen.Bounds;
+                hud.Display(macro.Item1, macro.Item2, screen, settings.HudCorner);
+                if (++hudTicks % 10 == 0) hud.KeepOnTop();
+                return;
+            }
             if (!hudArmed || !settings.Hud)
             {
                 hud?.Hide();
@@ -1500,6 +1571,15 @@ namespace VClicker
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            if (studio != null && !studio.IsDisposed)
+            {
+                studio.Close(); // asks to save unsaved changes
+                if (studio != null && !studio.IsDisposed && studio.Visible)
+                {
+                    e.Cancel = true;
+                    return;
+                }
+            }
             engine.Stop();
             ReadUi();
             settings.Save(settingsPath);
@@ -1529,7 +1609,7 @@ namespace VClicker
 
         internal static int ColorRef(Color color) => color.R | (color.G << 8) | (color.B << 16);
 
-        private static bool IsElevated()
+        internal static bool IsElevated()
         {
             using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
                 return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
