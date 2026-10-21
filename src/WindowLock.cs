@@ -142,7 +142,7 @@ namespace VClicker
             using (Process current = Process.GetCurrentProcess()) self = (uint)current.Id;
             EnumWindows((window, data) =>
             {
-                if (!IsCandidate(window)) return true;
+                if (!IsAppWindow(window)) return true;
                 GetWindowThreadProcessId(window, out uint processId);
                 if (processId == self) return true;
                 // The exe filter runs before the (slower) file description is read.
@@ -154,7 +154,8 @@ namespace VClicker
             return found;
         }
 
-        private static bool IsCandidate(IntPtr window)
+        /// <summary>A window a person would call "an app" (see <see cref="List"/>), as opposed to a dialog, menu or popup.</summary>
+        internal static bool IsAppWindow(IntPtr window)
         {
             if (!IsWindowVisible(window) || GetWindowTextLength(window) == 0) return false;
             if (GetWindow(window, GW_OWNER) != IntPtr.Zero) return false;
@@ -236,7 +237,7 @@ namespace VClicker
         }
 
         /// <summary>The window's usable area (no title bar or borders) in screen coordinates.</summary>
-        private static Rectangle ClientArea(IntPtr window)
+        internal static Rectangle ClientArea(IntPtr window)
         {
             if (!GetClientRect(window, out RECT client)) return Rectangle.Empty;
             var origin = new Native.POINT();

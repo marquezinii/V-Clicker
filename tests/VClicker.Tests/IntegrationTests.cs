@@ -285,6 +285,176 @@ namespace VClicker.Tests
                         File.Delete(lockIni);
                     }
                 });
+
+                Test("macro: records clicks and text in one window only, then replays them after the window moved", () =>
+                {
+                    Rectangle screen = Screen.PrimaryScreen.WorkingArea;
+                    using (var form = new Form
+                    {
+                        Text = "V-Clicker macro target", Size = new Size(360, 300), StartPosition = FormStartPosition.Manual,
+                        TopMost = true, Location = new Point(screen.Left + 520, screen.Top + 40)
+                    })
+                    using (var other = new Form
+                    {
+                        Text = "V-Clicker other window", Size = new Size(360, 160), StartPosition = FormStartPosition.Manual,
+                        TopMost = true, Location = new Point(screen.Left + 520, screen.Top + 400)
+                    })
+                    {
+                        int clicks = 0, strayClicks = 0;
+                        var button = new Button { Dock = DockStyle.Top, Height = 120, Text = "Gerar relatório" };
+                        button.Click += delegate { clicks++; };
+                        var box = new TextBox { Dock = DockStyle.Fill, Multiline = true, AcceptsReturn = true };
+                        form.Controls.Add(box);
+                        form.Controls.Add(button);
+                        var otherButton = new Button { Dock = DockStyle.Fill, Text = "Outro app" };
+                        otherButton.Click += delegate { strayClicks++; };
+                        other.Controls.Add(otherButton);
+                        other.Show();
+                        form.Show();
+                        form.Activate();
+                        Spin(300);
+
+                        Point Center(Control c)
+                        {
+                            Rectangle r = c.RectangleToScreen(c.ClientRectangle);
+                            return new Point(r.Left + r.Width / 2, r.Top + r.Height / 2);
+                        }
+
+                        var input = new SendInputInputSink();
+                        List<MacroStep> steps;
+                        using (var recorder = new MacroRecorder(form.Handle, new[] { new Hotkey(Keys.F8) }, acceptInjected: true, isPassword: () => false))
+                        {
+                            recorder.Start();
+                            Spin(100);
+                            new SendInputSink().Click(ClickButton.Left, false, Center(button));
+                            Spin(350);
+                            new SendInputSink().Click(ClickButton.Left, false, Center(otherButton)); // another window: not recorded
+                            Spin(350);
+                            True(recorder.Paused, "recording pauses while another window is in front");
+                            form.Activate();
+                            Spin(300);
+                            new SendInputSink().Click(ClickButton.Left, false, Center(box));
+                            Spin(350);
+                            foreach (char c in "Olá") { input.Char(c); Spin(40); }
+                            Spin(300);
+                            input.Key(Keys.Enter, true);
+                            input.Key(Keys.Enter, false);
+                            Spin(300);
+                            input.Key(Keys.F8, true); // V-Clicker's own hotkey: never recorded
+                            input.Key(Keys.F8, false);
+                            Spin(200);
+                            steps = recorder.Stop();
+                        }
+                        string actions = string.Join(" | ", steps.Where(s => s.Kind != StepKind.Wait).Select(s => s.Kind + (s.Kind == StepKind.Type ? " " + s.Text : "")));
+                        Equal("Click | Click | Type Olá | Key", actions, "recorded steps");
+                        Equal(Keys.Enter, steps.Last(s => s.Kind == StepKind.Key).Key, "the Enter key");
+                        True(steps.All(s => s.Window == null), "every step is in the bound window");
+                        Equal(1, clicks, "one real click while recording");
+                        Equal(1, strayClicks, "the other window got its own click");
+                        Equal("Olá\r\n", box.Text, "typed while recording");
+
+                        // Replay somewhere else on the screen: the steps are relative to the window.
+                        form.Location = new Point(form.Left + 60, form.Top + 30);
+                        form.Activate();
+                        Spin(300);
+                        var macro = new Macro { Repeat = 1, Steps = steps };
+                        uint process = MacroTarget.ProcessOf(form.Handle);
+                        IntPtr handle = form.Handle;
+                        MacroStopReason? reason = null;
+                        using (var player = new MacroPlayer(input))
+                        {
+                            player.Stopped += r => reason = r;
+                            True(player.Start(macro, s => MacroTarget.Check(handle, process, s), 0), "started");
+                            Stopwatch watch = Stopwatch.StartNew();
+                            while (player.Phase != MacroPhase.Idle && watch.ElapsedMilliseconds < 15000) Spin(20);
+                            Spin(200);
+                        }
+                        Equal(MacroStopReason.Completed, reason, "replayed to the end");
+                        Equal(2, clicks, "the button was clicked again");
+                        Equal("Olá\r\nOlá\r\n", box.Text, "the text was typed again");
+                        Equal(1, strayClicks, "nothing reached the other window");
+                    }
+                });
+
+                Test("macro studio: Record counts down, F8 stops the recording, Run replays it; F6 is refused meanwhile", () =>
+                {
+                    string studioIni = Path.Combine(Path.GetTempPath(), "vclicker-it-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                    Directory.CreateDirectory(Path.GetDirectoryName(studioIni));
+                    new ClickSettings { Sounds = false, StartDelaySeconds = 0, IntervalMs = 20 }.Save(studioIni);
+                    Rectangle screen = Screen.PrimaryScreen.WorkingArea;
+                    MainForm host = null;
+                    try
+                    {
+                        host = new MainForm(studioIni) { StartPosition = FormStartPosition.Manual, Location = new Point(screen.Left + 30, screen.Top + 30) };
+                        host.Show();
+                        Spin(300);
+                        using (var form = new Form
+                        {
+                            Text = "V-Clicker studio target", Size = new Size(360, 300), StartPosition = FormStartPosition.Manual,
+                            TopMost = true, Location = new Point(screen.Right - 420, screen.Top + 40)
+                        })
+                        {
+                            int clicks = 0;
+                            var button = new Button { Dock = DockStyle.Top, Height = 120, Text = "Baixar PDF" };
+                            button.Click += delegate { clicks++; };
+                            var box = new TextBox { Dock = DockStyle.Fill, Multiline = true };
+                            form.Controls.Add(box);
+                            form.Controls.Add(button);
+                            form.Show();
+                            Spin(200);
+
+                            MacroStudio studio = host.OpenStudio();
+                            studio.Location = new Point(screen.Left + 30, screen.Top + 30);
+                            studio.ListWindows = exe => new List<AppWindow> { WindowLock.FromHandle(form.Handle) };
+                            studio.PickWindow = (prompt, windows) => windows[0];
+                            studio.AcceptInjectedInput = true;
+                            Spin(300);
+
+                            Point Center(Control c)
+                            {
+                                Rectangle r = c.RectangleToScreen(c.ClientRectangle);
+                                return new Point(r.Left + r.Width / 2, r.Top + r.Height / 2);
+                            }
+
+                            studio.BeginRecording();
+                            True(studio.Busy, "counting down to the recording");
+                            Equal(form.Handle, WindowLock.Foreground(), "the chosen app was brought to the front");
+                            Spin(3400);
+                            new SendInputSink().Click(ClickButton.Left, false, Center(button));
+                            Spin(300);
+                            new SendInputSink().Click(ClickButton.Left, false, Center(box));
+                            Spin(300);
+                            var input = new SendInputInputSink();
+                            foreach (char c in "Oi") { input.Char(c); Spin(40); }
+                            Spin(300);
+                            SendKeys.SendWait("{F8}"); // the real global hotkey
+                            Spin(500);
+                            True(!studio.Busy, "F8 ended the recording");
+                            string actions = string.Join(" | ", studio.Current.Steps.Where(s => s.Kind != StepKind.Wait).Select(s => s.Kind.ToString()));
+                            Equal("Click | Click | Type", actions, "recorded through the Studio");
+                            Equal("V-Clicker.Tests.exe", studio.Current.ExeName, "bound to the app");
+                            Equal(1, clicks, "one click while recording");
+
+                            studio.BeginRun();
+                            True(studio.Busy, "running");
+                            Spin(300);
+                            SendKeys.SendWait("{F6}");
+                            Spin(300);
+                            Equal(EnginePhase.Idle, host.Engine.Phase, "the autoclicker does not start while a macro runs");
+                            Stopwatch watch = Stopwatch.StartNew();
+                            while (studio.Busy && watch.ElapsedMilliseconds < 15000) Spin(20);
+                            True(!studio.Busy, "the run ended");
+                            Equal(2, clicks, "the macro clicked the button again");
+                            Equal("OiOi", box.Text, "and typed the text again");
+                            studio.Dispose(); // unsaved on purpose: closing would ask to save
+                        }
+                    }
+                    finally
+                    {
+                        if (host != null && !host.IsDisposed) { host.Engine.Stop(); host.Close(); host.Dispose(); }
+                        Directory.Delete(Path.GetDirectoryName(studioIni), true);
+                    }
+                });
             }
             finally
             {
