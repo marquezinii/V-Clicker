@@ -35,6 +35,7 @@
     <!-- UI Automation ships with .NET Framework: used to keep password fields out of macros. -->
     <Reference Include="UIAutomationClient" />
     <Reference Include="UIAutomationTypes" />
+    <Reference Include="WindowsBase" />
     <!-- Ships with .NET Framework: sends deleted macros to the Recycle Bin. -->
     <Reference Include="Microsoft.VisualBasic" />
   </ItemGroup>

@@ -48,6 +48,8 @@ namespace VClicker
         // Capturing a point for the selected step (F7 in the target app).
         private AppWindow captureWindow;
         private int captureIndex = -1;
+        private enum CaptureFor { Point, Convert, Insert, Repoint }
+        private CaptureFor captureFor;
 
         // The status line, and what the indicator flashes after a stop.
         private string message;
@@ -67,7 +69,7 @@ namespace VClicker
         private Panel detail;
         private readonly List<Action> detailCommits = new List<Action>();
         private Label detailTitle; // the selected step as a sentence: kept current while its values are edited
-        private FlatButton bUp, bDown, bDuplicate, bRemove, bAddWait, bUndo, bRedo;
+        private FlatButton bUp, bDown, bDuplicate, bRemove, bAddWait, bAddCondition, bUndo, bRedo;
 
         internal MacroStudio(MainForm host, ClickSettings settings, string settingsPath)
         {
@@ -107,7 +109,10 @@ namespace VClicker
         // ------------------------------------------------------------------ state the main window reads
 
         /// <summary>Recording (or counting down to it) or running a macro.</summary>
-        public bool Busy => recordStartAt != 0 || recorder != null || player.Phase != MacroPhase.Idle;
+        public bool Busy => recordStartAt != 0 || recorder != null || player.Phase != MacroPhase.Idle || conditionDialogOpen;
+
+        // The condition dialog is open: F7 is swallowed, the clicker cannot start and nothing else edits the macro.
+        private bool conditionDialogOpen;
 
         /// <summary>What the on-screen indicator and the tray show for the Studio; null = nothing.</summary>
         public Tuple<Color, string> Indicator
@@ -164,11 +169,19 @@ namespace VClicker
         /// <summary>The capture hotkey: true when the Studio was waiting for it (the main window then ignores it).</summary>
         public bool OnCaptureHotkey()
         {
+            if (conditionDialogOpen) return true;
             if (captureIndex < 0) return false;
             int index = captureIndex;
             AppWindow window = captureWindow;
             captureIndex = -1;
             captureWindow = null;
+            if (captureFor != CaptureFor.Point)
+            {
+                if (index <= macro.Steps.Count && window != null) CaptureCondition(index, window, captureFor);
+                BringBack();
+                RefreshAll();
+                return true;
+            }
             if (index < macro.Steps.Count && window != null)
             {
                 Point at;
@@ -198,6 +211,84 @@ namespace VClicker
             BringBack();
             RefreshAll();
             return true;
+        }
+
+        /// <summary>F7 for a condition: read what the point offers, ask what to wait for, apply it.</summary>
+        private void CaptureCondition(int index, AppWindow window, CaptureFor mode)
+        {
+            ConditionProbe probe;
+            using (MacroTarget.PerMonitorDpi())
+            {
+                Native.GetCursorPos(out Native.POINT cursor);
+                probe = MacroConditions.Capture(window.Handle, new Point(cursor.X, cursor.Y));
+            }
+            if (probe == null)
+            {
+                SetMessage(Loc.F("mmsg.captureOutside", window.DisplayName), Theme.Warning);
+                host?.ErrorBeep();
+                return;
+            }
+            // The step must still be what the capture was started for.
+            MacroStep old = mode == CaptureFor.Insert || index >= macro.Steps.Count ? null : macro.Steps[index];
+            bool valid = mode == CaptureFor.Insert ? index <= macro.Steps.Count
+                       : mode == CaptureFor.Convert ? old?.Kind == StepKind.Wait : old?.Kind == StepKind.WaitFor;
+            if (!valid) return;
+            int timeout = old != null && old.Kind == StepKind.WaitFor ? old.DurationMs : MacroStep.DefaultTimeoutMs;
+            BringBack();
+            MacroStep condition;
+            conditionDialogOpen = true;
+            try
+            {
+                using (var dialog = new ConditionDialog(probe, timeout))
+                {
+                    if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                    condition = dialog.Result;
+                }
+            }
+            finally { conditionDialogOpen = false; }
+            switch (mode)
+            {
+                case CaptureFor.Convert: ConvertToCondition(index, condition); break;
+                case CaptureFor.Insert: InsertCondition(index, condition); break;
+                default:
+                    condition.WasMs = old.WasMs;
+                    condition.WasRecordedMs = old.WasRecordedMs;
+                    condition.Reverts = old.Reverts;
+                    Edit(() => macro.Steps[index] = condition);
+                    break;
+            }
+            host?.Beep(false);
+        }
+
+        /// <summary>A wait becomes a condition; the wait is kept inside it (duration and recorded time) to go back.</summary>
+        internal void ConvertToCondition(int index, MacroStep condition)
+        {
+            if (index < 0 || index >= macro.Steps.Count || macro.Steps[index].Kind != StepKind.Wait) return;
+            MacroStep wait = macro.Steps[index];
+            condition.WasMs = wait.DurationMs;
+            condition.WasRecordedMs = wait.RecordedMs;
+            condition.Reverts = true;
+            Edit(() => macro.Steps[index] = condition);
+            list.SelectedIndex = index;
+        }
+
+        internal void InsertCondition(int index, MacroStep condition)
+        {
+            index = Math.Max(0, Math.Min(macro.Steps.Count, index));
+            condition.WasMs = condition.WasRecordedMs = 0;
+            condition.Reverts = false;
+            Edit(() => macro.Steps.Insert(index, condition));
+            list.SelectedIndex = index;
+        }
+
+        /// <summary>The condition becomes the exact wait it replaced.</summary>
+        internal void RevertCondition(int index)
+        {
+            if (index < 0 || index >= macro.Steps.Count) return;
+            MacroStep condition = macro.Steps[index];
+            if (condition.Kind != StepKind.WaitFor || !condition.Reverts) return;
+            Edit(() => macro.Steps[index] = new MacroStep { Kind = StepKind.Wait, DurationMs = condition.WasMs, RecordedMs = condition.WasRecordedMs });
+            list.SelectedIndex = index;
         }
 
         // ------------------------------------------------------------------ layout
@@ -301,10 +392,11 @@ namespace VClicker
             bDown = Button("studio.down", ButtonKind.Chip, delegate { MoveStep(1); }, 70);
             bDuplicate = Button("studio.duplicate", ButtonKind.Chip, delegate { Duplicate(); }, 90);
             bRemove = Button("studio.remove", ButtonKind.Chip, delegate { Remove(); }, 80);
-            bAddWait = Button("studio.addWait", ButtonKind.Chip, delegate { InsertWait(); }, 90);
-            bUndo = Button("studio.undo", ButtonKind.Chip, delegate { Undo(); }, 90);
-            bRedo = Button("studio.redo", ButtonKind.Chip, delegate { Redo(); }, 90);
-            edits.Controls.AddRange(new Control[] { bUp, bDown, bDuplicate, bRemove, bAddWait, bUndo, bRedo });
+            bAddWait = Button("studio.addWait", ButtonKind.Chip, delegate { InsertWait(); }, 80);
+            bAddCondition = Button("studio.addCondition", ButtonKind.Chip, delegate { BeginCapture(list.SelectedIndex + 1, CaptureFor.Insert); }, 100);
+            bUndo = Button("studio.undo", ButtonKind.Chip, delegate { Undo(); }, 80);
+            bRedo = Button("studio.redo", ButtonKind.Chip, delegate { Redo(); }, 80);
+            edits.Controls.AddRange(new Control[] { bUp, bDown, bDuplicate, bRemove, bAddWait, bAddCondition, bUndo, bRedo });
 
             // Middle: the steps, and the selected step's values.
             var middle = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Theme.Bg };
@@ -450,6 +542,7 @@ namespace VClicker
                 case StepKind.Type: return "\u270E";
                 case StepKind.Key: case StepKind.Shortcut: return "\u2328";
                 case StepKind.Wait: return "\u23F1";
+                case StepKind.WaitFor: return "\u23F3";
                 case StepKind.Password: return "\U0001F512";
                 default: return "?";
             }
@@ -614,6 +707,38 @@ namespace VClicker
                         restore.Click += delegate { RestoreWait(index); };
                         Full(body, restore);
                     }
+                    var convert = new FlatButton
+                    {
+                        Text = Loc.T("studio.toCondition"), Kind = ButtonKind.Secondary, Size = Theme.Sz(220, 30),
+                        Enabled = editable && macro.ExeName.Length > 0, Margin = Theme.Pad(0, 4, 0, 4)
+                    };
+                    convert.Click += delegate { BeginCapture(index, CaptureFor.Convert); };
+                    Full(body, convert);
+                    Full(body, Note(Loc.T("studio.toCondition.tip"), Theme.Dim, 8.5f));
+                    break;
+                case StepKind.WaitFor:
+                    NumberField limit = Field(MacroStep.MinTimeoutMs / 1000, MacroStep.MaxTimeoutMs / 1000, step.DurationMs / 1000, editable);
+                    limit.Unit = "s";
+                    limit.ValueChanged += delegate { Edit(() => step.DurationMs = limit.Value * 1000, false); };
+                    Pair(body, "studio.timeout", limit);
+                    var repoint = new FlatButton
+                    {
+                        Text = Loc.T("studio.repoint"), Kind = ButtonKind.Secondary, Size = Theme.Sz(170, 30),
+                        Enabled = editable, Margin = Theme.Pad(0, 4, 0, 4)
+                    };
+                    repoint.Click += delegate { BeginCapture(index, CaptureFor.Repoint); };
+                    Full(body, repoint);
+                    if (step.Reverts)
+                    {
+                        var back = new FlatButton
+                        {
+                            Text = Loc.F("studio.backToWait", MacroStep.Seconds(step.WasMs)), Kind = ButtonKind.Secondary,
+                            Size = Theme.Sz(220, 30), Enabled = editable, Margin = Theme.Pad(0, 4, 0, 4)
+                        };
+                        back.Click += delegate { RevertCondition(index); };
+                        Full(body, back);
+                    }
+                    Full(body, Note(Loc.T(step.Condition == ConditionKind.Color ? "studio.colorInfo" : "studio.conditionInfo"), Theme.Dim, 8.5f));
                     break;
                 case StepKind.Password:
                     Full(body, Note(Loc.T("studio.passwordInfo"), Theme.Warning));
@@ -663,7 +788,7 @@ namespace VClicker
         /// <param name="rebuildDetail">false when the change comes from the detail panel itself (it must not be rebuilt under the user).</param>
         private void Edit(Action change, bool rebuildDetail = true)
         {
-            if (Busy) return;
+            if (Busy || captureIndex >= 0) return; // never under a pending capture (it would land on another step)
             undo.Add(macro.Clone());
             if (undo.Count > UndoLimit) undo.RemoveAt(0);
             redo.Clear();
@@ -719,7 +844,7 @@ namespace VClicker
 
         private void Swap(List<Macro> from, List<Macro> to)
         {
-            if (from.Count == 0 || Busy) return;
+            if (from.Count == 0 || Busy || captureIndex >= 0) return;
             to.Add(macro.Clone());
             macro = from[from.Count - 1];
             from.RemoveAt(from.Count - 1);
@@ -1116,7 +1241,8 @@ namespace VClicker
             runWindow = chosen;
             lastBeepSecond = -1;
             message = null;
-            if (!player.Start(macro, step => MacroTarget.Check(handle, process, step), CountdownMs))
+            if (!player.Start(macro, step => MacroTarget.Check(handle, process, step), CountdownMs,
+                              (step, cancel) => MacroConditions.Read(handle, process, step, cancel)))
             {
                 runWindow = null;
                 return;
@@ -1131,17 +1257,32 @@ namespace VClicker
             runWindow = null;
             shownStep = -1;
             bool fine = reason == MacroStopReason.Completed || reason == MacroStopReason.Manual;
-            SetMessage(Loc.F("mstop." + reason, name), reason == MacroStopReason.Completed ? Theme.Success : fine ? Theme.Dim : Theme.Warning);
+            string text = Loc.F("mstop." + reason, name);
+            int at = player.StepIndex;
+            if (reason == MacroStopReason.ConditionTimeout && at < macro.Steps.Count)
+            {
+                MacroStep step = macro.Steps[at];
+                string seconds = MacroStep.Seconds(step.DurationMs);
+                switch (step.Condition)
+                {
+                    case ConditionKind.Element: text = Loc.F("mstop.timeoutElement", step.Text, seconds); break;
+                    case ConditionKind.Color: text = Loc.F("mstop.timeoutColor", step.At.X, step.At.Y, seconds); break;
+                    default: text = Loc.F("mstop.timeoutWindow", step.Window?.Title ?? string.Empty, seconds); break;
+                }
+                text += " " + (at + 1 < macro.Steps.Count ? Loc.F("mstop.beforeStep", at + 2) : Loc.T("mstop.lastStep"));
+            }
+            SetMessage(text, reason == MacroStopReason.Completed ? Theme.Success : fine ? Theme.Dim : Theme.Warning);
             if (fine) host?.Beep(false);
             else host?.ErrorBeep();
-            if (reason == MacroStopReason.Password && player.StepIndex < macro.Steps.Count) list.SelectedIndex = player.StepIndex;
+            if ((reason == MacroStopReason.Password || reason == MacroStopReason.ConditionTimeout) && at < macro.Steps.Count)
+                list.SelectedIndex = at;
             BringBack();
             RefreshAll();
         }
 
         // ------------------------------------------------------------------ capturing a point
 
-        private void BeginCapture(int index)
+        private void BeginCapture(int index, CaptureFor mode = CaptureFor.Point)
         {
             if (Busy || index < 0) return;
             CommitDetail();
@@ -1160,6 +1301,7 @@ namespace VClicker
             }
             captureWindow = chosen;
             captureIndex = index;
+            captureFor = mode;
             message = null;
             RefreshAll();
         }
@@ -1217,12 +1359,16 @@ namespace VClicker
             if (recorder != null)
                 return recorder.Paused ? Loc.F("mstatus.recPaused", recordWindow.DisplayName)
                                        : Loc.F("mstatus.recording", recordWindow.DisplayName, settings.StopKey);
-            if (captureIndex >= 0) return Loc.F("mstatus.capture", captureWindow.DisplayName, settings.CaptureKey);
+            if (captureIndex >= 0)
+                return captureFor == CaptureFor.Point ? Loc.F("mstatus.capture", captureWindow.DisplayName, settings.CaptureKey)
+                                                      : Loc.F("mstatus.captureCondition", settings.CaptureKey);
             string app = runWindow?.DisplayName ?? AppName;
             switch (player.Phase)
             {
                 case MacroPhase.Countdown: return Loc.F("mstatus.runCountdown", Seconds(player.CountdownRemaining.TotalSeconds));
                 case MacroPhase.Running:
+                    if (player.Watching && player.StepIndex < macro.Steps.Count)
+                        return WatchingText(macro.Steps[player.StepIndex], player.Watched);
                     int step = Math.Min(player.StepIndex + 1, macro.Steps.Count);
                     string name = macro.Name.Length > 0 ? macro.Name : app;
                     return macro.Repeat == 0
@@ -1240,6 +1386,17 @@ namespace VClicker
                         default: return Loc.F("mstatus.waitApp", app);
                     }
                 default: return Loc.T("mstatus.ready");
+            }
+        }
+
+        private static string WatchingText(MacroStep step, TimeSpan watched)
+        {
+            string seconds = ((int)watched.TotalSeconds).ToString(CultureInfo.CurrentCulture);
+            switch (step.Condition)
+            {
+                case ConditionKind.Element: return Loc.F("mstatus.watchElement", step.Text, seconds);
+                case ConditionKind.Color: return Loc.F("mstatus.watchColor", step.At.X, step.At.Y, seconds);
+                default: return Loc.F("mstatus.watchWindow", step.Window?.Title ?? string.Empty, seconds);
             }
         }
 
@@ -1313,6 +1470,7 @@ namespace VClicker
             bDown.Enabled = idle && index >= 0 && index < macro.Steps.Count - 1;
             bDuplicate.Enabled = bRemove.Enabled = idle && index >= 0;
             bAddWait.Enabled = idle;
+            bAddCondition.Enabled = idle && macro.ExeName.Length > 0;
             bUndo.Enabled = idle && undo.Count > 0;
             bRedo.Enabled = idle && redo.Count > 0;
         }
@@ -1412,6 +1570,135 @@ namespace VClicker
         }
 
         // ------------------------------------------------------------------ dialogs
+
+        /// <summary>
+        /// After F7 for a condition: what was found at the point, which kind to watch (the likeliest is preselected),
+        /// and the time limit.
+        /// </summary>
+        internal sealed class ConditionDialog : Form
+        {
+            public MacroStep Result;
+
+            public ConditionDialog(ConditionProbe probe, int timeoutMs)
+            {
+                Text = Loc.T("cond.title");
+                Dialogs.Style(this);
+                var kinds = new List<ConditionKind>();
+                if (probe.ElementName.Length > 0) kinds.Add(ConditionKind.Element);
+                if (probe.Rgb.HasValue) kinds.Add(ConditionKind.Color);
+                if (probe.Dialog != null) kinds.Add(ConditionKind.Window);
+                ConditionKind preferred = kinds.Contains(ConditionKind.Element) ? ConditionKind.Element
+                                        : kinds.Contains(ConditionKind.Window) ? ConditionKind.Window : ConditionKind.Color;
+
+                var body = new TableLayoutPanel
+                {
+                    Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, BackColor = Theme.Bg
+                };
+                Control Line(string text, Color color, int bottom = 8) => new Label
+                {
+                    Text = text, AutoSize = true, ForeColor = color, BackColor = Theme.Bg, UseMnemonic = false,
+                    MaximumSize = new Size(Theme.Dp(440), 0), Margin = Theme.Pad(0, 0, 0, bottom)
+                };
+                var ok = new FlatButton { Text = Loc.T("cond.confirm"), Kind = ButtonKind.Primary, Size = Theme.Sz(120, 32) };
+                var cancel = new FlatButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 32), Margin = Theme.Pad(0, 0, 8, 0) };
+                cancel.Click += delegate { DialogResult = DialogResult.Cancel; };
+
+                if (kinds.Count == 0)
+                {
+                    body.Controls.Add(Line(Loc.T("cond.nothing"), Theme.Warning, 16));
+                    ok.Enabled = false;
+                }
+                else
+                {
+                    body.Controls.Add(Line(Loc.T("cond.intro"), Theme.Dim));
+                    var choice = new Segmented
+                    {
+                        Items = kinds.Select(k => Loc.T("cond.kind." + k)).ToArray(), Size = Theme.Sz(330, 30), Margin = Theme.Pad(0, 0, 0, 10)
+                    };
+                    choice.SelectedIndex = kinds.IndexOf(preferred);
+                    body.Controls.Add(choice);
+                    var found = (Label)Line(string.Empty, Theme.Text, 4);
+                    found.Font = Theme.Ui(10f, true);
+                    var swatch = new Panel { Size = Theme.Sz(60, 20), Margin = Theme.Pad(0, 0, 0, 6), BorderStyle = BorderStyle.FixedSingle };
+                    var note = (Label)Line(string.Empty, Theme.Dim, 12);
+                    body.Controls.Add(found);
+                    body.Controls.Add(swatch);
+                    body.Controls.Add(note);
+                    void Show()
+                    {
+                        ConditionKind kind = kinds[Math.Max(0, choice.SelectedIndex)];
+                        swatch.Visible = kind == ConditionKind.Color;
+                        switch (kind)
+                        {
+                            case ConditionKind.Element:
+                                found.Text = Loc.F("cond.foundElement", TypeLabel(probe.ControlType), probe.ElementName);
+                                note.Text = Loc.T("cond.noteElement");
+                                break;
+                            case ConditionKind.Color:
+                                int rgb = probe.Rgb.Value;
+                                found.Text = Loc.F("cond.foundColor", rgb.ToString("X6", CultureInfo.InvariantCulture), probe.At.X, probe.At.Y);
+                                swatch.BackColor = Color.FromArgb((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+                                note.Text = Loc.T("studio.colorInfo");
+                                break;
+                            default:
+                                found.Text = Loc.F("cond.foundWindow", probe.Dialog.Title);
+                                note.Text = Loc.T("cond.noteWindow");
+                                break;
+                        }
+                    }
+                    choice.SelectedChanged += delegate { Show(); };
+                    Show();
+                    foreach (ConditionKind missing in new[] { ConditionKind.Element, ConditionKind.Color, ConditionKind.Window })
+                        if (!kinds.Contains(missing)) body.Controls.Add(Line(Loc.T("cond.missing." + missing), Theme.Dim, 4));
+
+                    var limitRow = new FlowLayoutPanel { AutoSize = true, BackColor = Theme.Bg, Margin = Theme.Pad(0, 10, 0, 0), WrapContents = false };
+                    limitRow.Controls.Add(new Label
+                    {
+                        Text = Loc.T("studio.timeout"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Margin = Theme.Pad(0, 8, 10, 0)
+                    });
+                    var limit = new NumberField
+                    {
+                        Minimum = MacroStep.MinTimeoutMs / 1000, Maximum = MacroStep.MaxTimeoutMs / 1000, Size = Theme.Sz(90, 30), Unit = "s"
+                    };
+                    limit.Number = timeoutMs / 1000;
+                    limitRow.Controls.Add(limit);
+                    body.Controls.Add(limitRow);
+
+                    ok.Click += delegate
+                    {
+                        limit.Commit();
+                        ConditionKind kind = kinds[Math.Max(0, choice.SelectedIndex)];
+                        Result = new MacroStep
+                        {
+                            Kind = StepKind.WaitFor, Condition = kind, DurationMs = limit.Value * 1000,
+                            At = kind == ConditionKind.Window ? Point.Empty : probe.At,
+                            Window = kind == ConditionKind.Window ? probe.Dialog?.Clone() : probe.Window?.Clone(),
+                            ControlType = kind == ConditionKind.Element ? probe.ControlType : string.Empty,
+                            Text = kind == ConditionKind.Element ? probe.ElementName : string.Empty,
+                            Rgb = kind == ConditionKind.Color ? probe.Rgb.Value : 0
+                        };
+                        DialogResult = DialogResult.OK;
+                    };
+                }
+                var buttons = new FlowLayoutPanel
+                {
+                    FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, BackColor = Theme.Bg, Margin = Theme.Pad(0, 16, 0, 0)
+                };
+                buttons.Controls.Add(ok);
+                buttons.Controls.Add(cancel);
+                body.Controls.Add(buttons);
+                Controls.Add(body);
+                KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) DialogResult = DialogResult.Cancel; };
+            }
+
+            /// <summary>"Botão" for "Button": the control types a person recognizes, in their language.</summary>
+            internal static string TypeLabel(string type)
+            {
+                string key = "cond.type." + type;
+                string label = Loc.T(key);
+                return label == key ? type : label;
+            }
+        }
 
         /// <summary>The pause optimization: long waits, each with a tick (all off) and a new value (1 s).</summary>
         private sealed class PauseOptimizer : Form

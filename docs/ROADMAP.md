@@ -50,7 +50,9 @@ outra janela do mesmo processo ou executável e continuar nela.
 Ordem: Macro Studio → Conditional Click → Smart Target. Ficam isoladas na janela do Macro Studio; o usuário casual
 não precisa entender nada disso para usar o autoclicker.
 
-- **Macro Studio V1:** implementado ([design](superpowers/specs/2026-10-21-macro-studio-design.md)). Próximo: Conditional Click.
+- **Macro Studio V1:** implementado ([design](superpowers/specs/2026-10-21-macro-studio-design.md)).
+- **Conditional Click V1:** implementado ([design](superpowers/specs/2026-10-22-conditional-click-design.md)): esperar
+  até elemento, cor ou janela, num ponto fixo. Próximo: Smart Target (achar o elemento mesmo que mude de lugar).
 - **Macro Studio, depois da V1:**
   - Deslocar o ponto de um clique a cada repetição (listas de linhas fixas). Adiado porque falha com rolagem, linhas
     de alturas diferentes e mudanças de layout; a V1 navega pelo teclado gravado.
@@ -58,6 +60,6 @@ não precisa entender nada disso para usar o autoclicker.
     janela pode servir de proteção complementar, mas não identifica uma página com segurança.
   - Macros que passam por vários aplicativos.
   - Atalho global para executar uma macro.
-- **Conditional Click:** agir só quando uma condição for satisfeita (botão apareceu, cor mudou, janela aberta), com tempo-limite e interrupção.
+- **Conditional Click, depois da V1:** condições compostas (E/OU), "se… senão" e repetir até; esperar até algo **sumir** (por exemplo, um "carregando").
 - **Smart Target:** achar o alvo por elemento de interface ou imagem, mesmo que a janela mude de posição.
 - **Dados de planilha:** preencher campos a partir de uma planilha (exige digitar texto, não só clicar).

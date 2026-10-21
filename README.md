@@ -23,6 +23,7 @@ Um único `.exe`, sem instalador, sem telemetria, sem rede.
 - **Velocidade em CPS** (cliques por segundo, com uma casa decimal) ou **intervalo em h / min / s / ms**: os dois editam a mesma velocidade, sem arredondar (15 CPS = 66,667 ms). Atalhos `5`, `10`, `15`, `20` e `50 CPS`.
 - **Window Lock**: escolha um aplicativo (ex.: Roblox) e o V-Clicker só clica com ele em primeiro plano. Num Alt+Tab, **pausa e retoma sozinho** quando você volta (ou para, se preferir). F6 só começa com o aplicativo na frente; o botão *Iniciar* o traz para a frente. Para de vez se a janela fechar, se a pausa passar de 5 minutos ou se o PC for bloqueado ou suspenso.
 - **Macro Studio** (janela própria, botão no topo): clique em *Gravar*, escolha o aplicativo e faça a tarefa uma vez. Cada clique, tecla, texto e espera vira um passo em português (`Clicar (esquerdo) em 812, 440`, `Esperar 8 s`, `Digitar "Relatório"`), que você edita, salva e repete N vezes ou até parar. A macro só age na janela em que foi gravada (e nos diálogos dela): se outra janela vier para a frente, ela pausa; F8 para tudo na hora. Esperas longas podem ser encurtadas, sempre com a sua confirmação e com o tempo gravado guardado. Campos de senha não são gravados, e a execução para nesse ponto. Em navegadores, a troca de aba dentro da mesma janela não é detectada.
+- **Esperar até… (Conditional Click)**, no Macro Studio: transforme uma espera gravada (ou insira do zero) em "esperar até o botão *Baixar PDF* estar disponível", "até a cor deste ponto aparecer" ou "até a janela *Salvar como* abrir". A macro segue assim que a condição é confirmada (duas leituras seguidas) e para antes do passo seguinte se o tempo máximo acabar. Tempo com outra janela na frente não conta; uma leitura duvidosa nunca libera a macro. Dá para voltar à espera original. Observa um ponto fixo da janela (achar o elemento em outro lugar é o Smart Target, a próxima etapa).
 - **Variação aleatória** (±0–50 %) para cliques menos mecânicos.
 - **Botão esquerdo, do meio ou direito**, clique **simples ou duplo**.
 - **Repetir para sempre ou N vezes** (até 1 bilhão), parando sozinho ao terminar.
@@ -84,12 +85,12 @@ src/             o aplicativo (WinForms, .NET Framework 4.8, sem dependências d
   WindowLock.cs    janelas do Windows para o Window Lock (lista, foco, área da janela);  WindowPicker.cs  escolha do app
   Hud.cs           indicador na tela (janela separada, transparente a cliques, nunca recebe foco)
   Macro*.cs        Macro Studio: formato .vcmacro, gravador (ganchos só durante a gravação), regras de passos,
-                   janela vinculada, player com proteção a cada passo, e a janela do Studio
+                   janela vinculada, player com proteção a cada passo, condições "esperar até…" e a janela do Studio
   Hotkey.cs        atalhos globais (RegisterHotKey) e validação
   Settings.cs      configurações em .ini, com validação e fallback seguro
   MainForm.cs      janela principal;  Controls.cs / Theme.cs  controles e tema escuros
   Loc.cs           textos em português e inglês
-tests/           executor de testes sem dependências (88 testes unitários + 6 de integração)
+tests/           executor de testes sem dependências (93 testes unitários + 7 de integração)
 assets/          ícone oficial
 docs/            capturas de tela
 ```

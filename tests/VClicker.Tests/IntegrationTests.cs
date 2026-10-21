@@ -17,6 +17,19 @@ namespace VClicker.Tests
     /// </summary>
     internal static class IntegrationTests
     {
+        /// <summary>A topmost window that never takes the focus (to cover a point without changing the foreground).</summary>
+        private sealed class NoActivateForm : Form
+        {
+            public NoActivateForm()
+            {
+                FormBorderStyle = FormBorderStyle.None;
+                ShowInTaskbar = false;
+                BackColor = Color.White;
+            }
+
+            protected override bool ShowWithoutActivation => true;
+        }
+
         [DllImport("user32.dll")]
         private static extern IntPtr WindowFromPoint(Native.POINT point);
 
@@ -373,6 +386,87 @@ namespace VClicker.Tests
                         Equal(2, clicks, "the button was clicked again");
                         Equal("Olá\r\nOlá\r\n", box.Text, "the text was typed again");
                         Equal(1, strayClicks, "nothing reached the other window");
+                    }
+                });
+
+                Test("conditions: element, colour and dialog read from real windows; disabled or covered is 'not yet'", () =>
+                {
+                    Rectangle screen = Screen.PrimaryScreen.WorkingArea;
+                    using (var form = new Form
+                    {
+                        Text = "V-Clicker condition target", Size = new Size(360, 260), StartPosition = FormStartPosition.Manual,
+                        TopMost = true, Location = new Point(screen.Right - 420, screen.Top + 40)
+                    })
+                    using (var dialog = new Form { Text = "Salvar como", Size = new Size(240, 140), StartPosition = FormStartPosition.Manual, Location = new Point(screen.Right - 400, screen.Top + 320) })
+                    using (var cover = new NoActivateForm { Size = new Size(80, 80), StartPosition = FormStartPosition.Manual, TopMost = true })
+                    {
+                        var button = new Button { Text = "Baixar PDF", Dock = DockStyle.Top, Height = 80, Enabled = false };
+                        var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(0x3A, 0x6B, 0xD1) };
+                        form.Controls.Add(panel);
+                        form.Controls.Add(button);
+                        form.Show();
+                        form.Activate();
+                        Spin(300);
+                        IntPtr handle = form.Handle;
+                        uint process = MacroTarget.ProcessOf(handle);
+
+                        T OffThread<T>(Func<T> read) // UI Automation into our own window needs this thread pumping
+                        {
+                            var task = System.Threading.Tasks.Task.Run(read);
+                            Stopwatch wait = Stopwatch.StartNew();
+                            // Answer our window's messages at once, like a real app's message loop (each read sends several).
+                            while (!task.IsCompleted && wait.ElapsedMilliseconds < 5000) { Application.DoEvents(); Thread.Sleep(0); }
+                            True(task.IsCompleted, "read finished");
+                            return task.Result;
+                        }
+                        Point Center(Control c)
+                        {
+                            Rectangle r = c.RectangleToScreen(c.ClientRectangle);
+                            return new Point(r.Left + r.Width / 2, r.Top + r.Height / 2);
+                        }
+                        ConditionRead Read(MacroStep step) => OffThread(() =>
+                        {
+                            using (MacroTarget.PerMonitorDpi()) return MacroConditions.Read(handle, process, step, CancellationToken.None);
+                        });
+
+                        ConditionProbe onButton = OffThread(() => MacroConditions.Capture(handle, Center(button)));
+                        True(onButton != null, "the point is in the bound window");
+                        Equal("Button", onButton.ControlType, "the button itself, not its text");
+                        Equal("Baixar PDF", onButton.ElementName, "its name");
+                        var element = new MacroStep
+                        {
+                            Kind = StepKind.WaitFor, Condition = ConditionKind.Element, At = onButton.At, ControlType = onButton.ControlType,
+                            Text = onButton.ElementName, DurationMs = 30000
+                        };
+                        Equal(ConditionRead.NotYet, Read(element), "disabled = not available yet");
+                        button.Enabled = true;
+                        Spin(100);
+                        Equal(ConditionRead.Met, Read(element), "enabled = available");
+
+                        ConditionProbe onPanel = OffThread(() => MacroConditions.Capture(handle, Center(panel)));
+                        True(onPanel.Rgb.HasValue && MacroConditions.Close(onPanel.Rgb.Value, 0x3A6BD1), "panel colour read: " + onPanel.Rgb?.ToString("X6"));
+                        var color = new MacroStep { Kind = StepKind.WaitFor, Condition = ConditionKind.Color, At = onPanel.At, Rgb = 0x3A6BD1, DurationMs = 30000 };
+                        Equal(ConditionRead.Met, Read(color), "colour met");
+                        panel.BackColor = Color.White;
+                        Spin(100);
+                        Equal(ConditionRead.NotYet, Read(color), "colour changed");
+                        panel.BackColor = Color.FromArgb(0x3A, 0x6B, 0xD1);
+                        cover.Location = new Point(Center(panel).X - 40, Center(panel).Y - 40);
+                        cover.Show();
+                        Spin(200);
+                        Equal(ConditionRead.NotYet, Read(color), "a window of the same app on top: inconclusive, never met");
+                        cover.Hide();
+                        Spin(100);
+
+                        var window = new MacroStep
+                        {
+                            Kind = StepKind.WaitFor, Condition = ConditionKind.Window, DurationMs = 30000,
+                            Window = new WindowRef { Class = MacroTarget.ClassName(dialog.Handle), Title = "Salvar como" }
+                        };
+                        Equal(ConditionRead.NotYet, Read(window), "dialog not open");
+                        dialog.Show(form);
+                        Spin(200);
+                        Equal(ConditionRead.Met, Read(window), "dialog open");
                     }
                 });
 
