@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Conditional Click** ("wait until…" macro steps): wait until a UI element is available (UI Automation; the
+  interactive control is found from its text), until a point shows a colour, or until a dialog opens, with a time limit
+  (30 s by default, 1–3600 s). Moves on after two consecutive positive reads; stops before the next step on timeout,
+  with a message naming the step. Another app in front pauses the watch without spending the limit; failed, slow or
+  ambiguous reads never count as met, and colours are never read through a covering window. Created by converting a
+  recorded wait (reversible, exactly) or inserted from scratch.
 - **Macro Studio**: record a task once in one app window, see it as plain-language steps (click, double click, drag,
   hover, scroll, type, key, shortcut, wait), edit them with undo/redo, save them as `.vcmacro` files and repeat them
   N times or until stopped. Macros are bound to the recorded window (plus its dialogs and menus): another window in

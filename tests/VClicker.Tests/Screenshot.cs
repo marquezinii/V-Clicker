@@ -25,6 +25,7 @@ namespace VClicker.Tests
 
             string ini = Path.Combine(Path.GetTempPath(), "vclicker-shot-" + Guid.NewGuid().ToString("N") + ".ini");
             if (Array.IndexOf(options, "studio") >= 0) return TakeStudio(output, language, ini);
+            if (Array.IndexOf(options, "condition") >= 0) return TakeCondition(output, language);
             try
             {
                 new ClickSettings { Language = language, StartDelaySeconds = 0, Sounds = false, IntervalMs = 100 }.Save(ini);
@@ -99,6 +100,30 @@ namespace VClicker.Tests
                     picture.Save(output, ImageFormat.Png);
                 }
                 Console.WriteLine("saved " + output + " (" + bounds.Width + "x" + bounds.Height + ", scale " + Theme.Scale + "x)");
+            }
+            return 0;
+        }
+
+        /// <summary>The "wait until" dialog after F7 on a button (<c>--screenshot out.png pt condition</c>).</summary>
+        private static int TakeCondition(string output, string language)
+        {
+            Loc.SetLanguage(language);
+            var probe = new ConditionProbe
+            {
+                At = new Point(640, 520), ElementName = language == "en" ? "Download PDF" : "Baixar PDF", ControlType = "Button", Rgb = 0x3A6BD1
+            };
+            using (var dialog = new MacroStudio.ConditionDialog(probe, 30000))
+            {
+                dialog.StartPosition = FormStartPosition.Manual;
+                dialog.Location = new Point(60, 40);
+                dialog.Show();
+                Pump(500);
+                Rectangle bounds = dialog.Bounds;
+                using (var picture = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb))
+                {
+                    dialog.DrawToBitmap(picture, new Rectangle(Point.Empty, bounds.Size));
+                    picture.Save(output, ImageFormat.Png);
+                }
             }
             return 0;
         }

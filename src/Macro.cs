@@ -9,7 +9,10 @@ using System.Windows.Forms;
 
 namespace VClicker
 {
-    internal enum StepKind { Click, DoubleClick, Drag, Hover, Scroll, Type, Key, Shortcut, Wait, Password, Unknown }
+    internal enum StepKind { Click, DoubleClick, Drag, Hover, Scroll, Type, Key, Shortcut, Wait, Password, Unknown, WaitFor }
+
+    /// <summary>What a "wait until" step watches (see docs/superpowers/specs/2026-10-22-conditional-click-design.md).</summary>
+    internal enum ConditionKind { Element, Color, Window }
 
     /// <summary>
     /// A window of the macro's app other than the bound one (a dialog like "Save as", a menu), by class and title.
@@ -58,6 +61,19 @@ namespace VClicker
         /// <summary>Unknown: the original file line, written back unchanged.</summary>
         public string Raw = string.Empty;
 
+        // Wait until (WaitFor): DurationMs is the timeout, At + Window the watched point (Window = the dialog itself
+        // for ConditionKind.Window), Text the element's name.
+        public const int MinTimeoutMs = 1000, MaxTimeoutMs = 3600 * 1000, DefaultTimeoutMs = 30 * 1000;
+        public ConditionKind Condition;
+        /// <summary>Element: the UI Automation control type ("Button", "Hyperlink"...).</summary>
+        public string ControlType = string.Empty;
+        /// <summary>Color: 0xRRGGBB.</summary>
+        public int Rgb;
+        /// <summary>The wait this condition replaced (<see cref="Reverts"/>): its duration and recorded time.</summary>
+        public int WasMs, WasRecordedMs;
+        /// <summary>The condition came from a wait and can turn back into it (false = inserted from scratch).</summary>
+        public bool Reverts;
+
         public bool IsMouse =>
             Kind == StepKind.Click || Kind == StepKind.DoubleClick || Kind == StepKind.Drag ||
             Kind == StepKind.Hover || Kind == StepKind.Scroll;
@@ -93,6 +109,14 @@ namespace VClicker
                     string text = Loc.F("step.wait", Seconds(DurationMs));
                     return IsShortened ? text + Loc.F("step.recorded", Seconds(RecordedMs)) : text;
                 case StepKind.Password: return Loc.T("step.password");
+                case StepKind.WaitFor:
+                    string limit = Seconds(DurationMs);
+                    switch (Condition)
+                    {
+                        case ConditionKind.Element: return Loc.F("step.waitElement", Clean(Text), limit) + where;
+                        case ConditionKind.Color: return Loc.F("step.waitColor", Rgb.ToString("X6", CultureInfo.InvariantCulture), At.X, At.Y, limit) + where;
+                        default: return Loc.F("step.waitWindow", Clean(Window?.Title ?? string.Empty), limit);
+                    }
                 default: return Loc.F("step.unknown", Raw);
             }
         }
@@ -376,6 +400,18 @@ namespace VClicker
                     return "wait " + step.DurationMs.ToString(Inv) +
                            (step.RecordedMs > 0 ? " recorded=" + step.RecordedMs.ToString(Inv) : string.Empty);
                 case StepKind.Password: return "password";
+                case StepKind.WaitFor:
+                    string target;
+                    switch (step.Condition)
+                    {
+                        case ConditionKind.Element: target = "element " + Pt(step.At) + " " + Quote(step.ControlType) + " " + Quote(step.Text); break;
+                        case ConditionKind.Color: target = "color " + Pt(step.At) + " " + step.Rgb.ToString("X6", Inv); break;
+                        default: target = "window " + Quote(step.Window?.Class) + " " + Quote(step.Window?.Title); break;
+                    }
+                    return "waitfor " + target + " timeout=" + step.DurationMs.ToString(Inv) +
+                           (step.Reverts ? " was=" + step.WasMs.ToString(Inv) : string.Empty) +
+                           (step.WasRecordedMs > 0 ? " recorded=" + step.WasRecordedMs.ToString(Inv) : string.Empty) +
+                           (step.Condition != ConditionKind.Window ? window : string.Empty);
                 default: return step.Raw;
             }
         }
@@ -432,6 +468,8 @@ namespace VClicker
                 case "password":
                     step.Kind = StepKind.Password;
                     return t.Count == 1 ? step : unknown;
+                case "waitfor":
+                    return ParseWaitFor(t, step) ? step : unknown;
                 default:
                     return unknown;
             }
@@ -443,6 +481,58 @@ namespace VClicker
                 return step;
             }
             return unknown;
+        }
+
+        private static bool ParseWaitFor(List<string> t, MacroStep step)
+        {
+            step.Kind = StepKind.WaitFor;
+            if (t.Count < 2) return false;
+            int i = 2;
+            switch (t[1])
+            {
+                case "element":
+                    step.Condition = ConditionKind.Element;
+                    if (!ParsePoint(t, ref i, out step.At) || i + 1 >= t.Count || t[i].Length == 0 || t[i + 1].Length == 0) return false;
+                    step.ControlType = t[i];
+                    step.Text = t[i + 1];
+                    i += 2;
+                    break;
+                case "color":
+                    step.Condition = ConditionKind.Color;
+                    if (!ParsePoint(t, ref i, out step.At) || i >= t.Count || t[i].Length != 6 ||
+                        !int.TryParse(t[i], NumberStyles.AllowHexSpecifier, Inv, out step.Rgb)) return false;
+                    i++;
+                    break;
+                case "window":
+                    step.Condition = ConditionKind.Window;
+                    if (i + 1 >= t.Count || t[i].Length == 0) return false;
+                    step.Window = new WindowRef { Class = t[i], Title = t[i + 1] };
+                    i += 2;
+                    break;
+                default:
+                    return false;
+            }
+            bool timeout = false;
+            while (i < t.Count)
+            {
+                if (t[i] == "in" && step.Condition != ConditionKind.Window && step.Window == null && i + 2 < t.Count && t[i + 1].Length > 0)
+                {
+                    step.Window = new WindowRef { Class = t[i + 1], Title = t[i + 2] };
+                    i += 3;
+                    continue;
+                }
+                int eq = t[i].IndexOf('=');
+                if (eq <= 0 || !int.TryParse(t[i].Substring(eq + 1), NumberStyles.Integer, Inv, out int value)) return false;
+                switch (t[i].Substring(0, eq))
+                {
+                    case "timeout": step.DurationMs = Clamp(value, MacroStep.MinTimeoutMs, MacroStep.MaxTimeoutMs); timeout = true; break;
+                    case "was": step.WasMs = Clamp(value, 0, MacroStep.MaxWaitMs); step.Reverts = true; break;
+                    case "recorded": step.WasRecordedMs = Clamp(value, 0, MacroStep.MaxWaitMs); break;
+                    default: return false;
+                }
+                i++;
+            }
+            return timeout; // a condition without a time limit is never run
         }
 
         private static bool ParseButton(List<string> t, ref int i, out ClickButton button)

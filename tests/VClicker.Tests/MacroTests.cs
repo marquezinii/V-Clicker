@@ -17,6 +17,176 @@ namespace VClicker.Tests
             TargetTests();
             PlayerTests();
             StudioTests();
+            ConditionTests();
+        }
+
+        // ------------------------------------------------------------------ wait until (Conditional Click)
+
+        private static MacroStep WaitForElement(int timeoutMs) => new MacroStep
+        {
+            Kind = StepKind.WaitFor, Condition = ConditionKind.Element, At = new Point(640, 520), ControlType = "Button",
+            Text = "Baixar PDF", DurationMs = timeoutMs
+        };
+
+        /// <summary>Runs to the end; returns the reason and the ms from start to the first click (-1 = none).</summary>
+        private static MacroStopReason PlayWatching(Macro macro, Func<MacroStep, ConditionRead> condition, out double clickMs,
+                                                    Action<MacroPlayer> during = null)
+        {
+            var sink = new FakeInputSink();
+            MacroStopReason? reason = null;
+            long start = System.Diagnostics.Stopwatch.GetTimestamp();
+            using (var player = new MacroPlayer(sink))
+            {
+                player.Stopped += r => reason = r;
+                True(player.Start(macro, Ok, 0, (step, cancel) => condition(step)), "started");
+                during?.Invoke(player);
+                True(player.WaitForStop(10000), "finished in time");
+            }
+            string[] log = sink.Snapshot();
+            int down = Array.IndexOf(log, "down Left");
+            clickMs = down < 0 ? -1 : (sink.StampOf(down) - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            return reason.Value;
+        }
+
+        private static void ConditionTests()
+        {
+            Test("conditions: the three kinds round-trip through the file, original wait included", () =>
+            {
+                var macro = new Macro();
+                macro.Steps.Add(new MacroStep
+                {
+                    Kind = StepKind.WaitFor, Condition = ConditionKind.Element, At = new Point(640, 520), ControlType = "Button",
+                    Text = "Baixar \"PDF\"", DurationMs = 30000, WasMs = 1000, WasRecordedMs = 25000, Reverts = true
+                });
+                macro.Steps.Add(new MacroStep
+                {
+                    Kind = StepKind.WaitFor, Condition = ConditionKind.Color, At = new Point(1, 2), Rgb = 0x3A6BD1, DurationMs = 5000,
+                    Window = new WindowRef { Class = "#32770", Title = "Salvar como" }
+                });
+                macro.Steps.Add(new MacroStep
+                {
+                    Kind = StepKind.WaitFor, Condition = ConditionKind.Window, DurationMs = 3600000,
+                    Window = new WindowRef { Class = "#32770", Title = "Salvar como" }
+                });
+                string text = MacroFile.Write(macro);
+                Macro loaded = MacroFile.Read(text);
+                Equal(text, MacroFile.Write(loaded), "identical");
+                True(!loaded.HasUnknown, "all known");
+                Equal(25000, loaded.Steps[0].WasRecordedMs, "the recorded time of the original wait");
+                Equal(0x3A6BD1, loaded.Steps[1].Rgb, "colour");
+                Equal("Salvar como", loaded.Steps[1].Window.Title, "point anchored in a dialog");
+                True(loaded.Steps[0].Describe().Contains("Baixar \"PDF\""), loaded.Steps[0].Describe());
+                foreach (string bad in new[]
+                {
+                    "waitfor element 1 2 \"Button\" \"x\"", "waitfor color 1 2 GGGGGG timeout=1000", "waitfor window \"\" \"x\" timeout=1000",
+                    "waitfor element 1 2 \"Button\" \"x\" timeout=1000 speed=2", "waitfor smell timeout=1000"
+                })
+                    True(MacroFile.Read("V-Clicker macro 1\n[steps]\n" + bad + "\n").HasUnknown, "should stay unknown: " + bad);
+                Equal(MacroStep.MinTimeoutMs, MacroFile.Read("V-Clicker macro 1\n[steps]\nwaitfor window \"c\" \"t\" timeout=5\n").Steps[0].DurationMs, "timeout clamped");
+            });
+
+            Test("conditions: met twice in a row moves on at once; one flicker does not", () =>
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                Macro macro = Steps(1, WaitForElement(5000), new MacroStep { Kind = StepKind.Click });
+                Equal(MacroStopReason.Completed, PlayWatching(macro,
+                    s => watch.ElapsedMilliseconds >= 300 ? ConditionRead.Met : ConditionRead.NotYet, out double clickMs), "met");
+                True(clickMs >= 300 && clickMs < 800, "clicked " + clickMs.ToString("0") + " ms after start (met at 300 ms, not after the 5 s limit)");
+
+                int reads = 0;
+                Equal(MacroStopReason.ConditionTimeout, PlayWatching(Steps(1, WaitForElement(1000), new MacroStep { Kind = StepKind.Click }),
+                    s => ++reads == 3 ? ConditionRead.Met : ConditionRead.NotYet, out double never), "a single positive read");
+                Equal(-1.0, never, "the next step never ran");
+            });
+
+            Test("conditions: time away does not count toward the limit; stop and a closed window end the watch", () =>
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                MacroPhase seen = MacroPhase.Idle;
+                Equal(MacroStopReason.ConditionTimeout, PlayWatching(Steps(1, WaitForElement(1000)),
+                    s => watch.ElapsedMilliseconds < 1200 ? ConditionRead.Away : ConditionRead.NotYet, out _,
+                    p => { System.Threading.Thread.Sleep(400); seen = p.Phase; }), "times out after all");
+                Equal(MacroPhase.Paused, seen, "paused while another app was in front");
+                True(watch.ElapsedMilliseconds >= 2100, "the 1 s limit only ran after the pause: " + watch.ElapsedMilliseconds + " ms");
+
+                var stopWatch = new System.Diagnostics.Stopwatch();
+                Equal(MacroStopReason.Manual, PlayWatching(Steps(1, WaitForElement(30000), new MacroStep { Kind = StepKind.Click }),
+                    s => { System.Threading.Thread.Sleep(250); return ConditionRead.Met; }, out double late,
+                    p => { System.Threading.Thread.Sleep(380); stopWatch.Start(); p.Stop(); }), "stopped");
+                Equal(-1.0, late, "a read that came back after the stop did not move the macro on");
+
+                Equal(MacroStopReason.TargetClosed, PlayWatching(Steps(1, WaitForElement(30000)), s => ConditionRead.Closed, out _), "closed");
+                Equal(MacroStopReason.Manual, PlayWatching(Steps(1, WaitForElement(30000)), s => ConditionRead.NotYet, out _,
+                    p =>
+                    {
+                        System.Threading.Thread.Sleep(150);
+                        var t = System.Diagnostics.Stopwatch.StartNew();
+                        p.Stop();
+                        True(p.WaitForStop(1000) && t.ElapsedMilliseconds < 100, "F8 while watching: " + t.ElapsedMilliseconds + " ms");
+                    }), "stopped while watching");
+            });
+
+            Test("conditions in the studio: a wait becomes a condition and back exactly, even after saving", () =>
+            {
+                string ini = Path.Combine(Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                using (var studio = new MacroStudio(null, new ClickSettings(), ini))
+                {
+                    Macro macro = Steps(1, new MacroStep { Kind = StepKind.Click, At = new Point(1, 1) },
+                        new MacroStep { Kind = StepKind.Wait, DurationMs = 1000, RecordedMs = 25000 },
+                        new MacroStep { Kind = StepKind.Click, At = new Point(2, 2) });
+                    macro.ExeName = "notepad.exe";
+                    studio.Open(macro, null);
+                    string original = Describe(studio.Current);
+
+                    studio.ConvertToCondition(1, WaitForElement(30000));
+                    MacroStep condition = studio.Current.Steps[1];
+                    Equal(StepKind.WaitFor, condition.Kind, "converted");
+                    Equal(1000, condition.WasMs, "the wait's duration is kept");
+                    Equal(25000, condition.WasRecordedMs, "and its recorded time");
+
+                    studio.Open(MacroFile.Read(MacroFile.Write(studio.Current)), null); // saved and reopened
+                    studio.RevertCondition(1);
+                    Equal(original, Describe(studio.Current), "back to exactly the original wait");
+                    Equal(25000, studio.Current.Steps[1].RecordedMs, "recorded time included");
+
+                    studio.InsertCondition(0, new MacroStep
+                    {
+                        Kind = StepKind.WaitFor, Condition = ConditionKind.Window, DurationMs = 5000, WasMs = 777, Reverts = true,
+                        Window = new WindowRef { Class = "#32770", Title = "Salvar como" }
+                    });
+                    Equal(4, studio.Current.Steps.Count, "inserted");
+                    True(!studio.Current.Steps[0].Reverts, "a condition inserted from scratch has no wait to go back to");
+                    studio.RevertCondition(0);
+                    Equal(StepKind.WaitFor, studio.Current.Steps[0].Kind, "so it stays a condition");
+                    studio.Undo();
+                    Equal(original, Describe(studio.Current), "undo");
+
+                    // A wait shortened to 0 s (recorded 8 s) still turns back into exactly itself.
+                    studio.Open(Steps(1, new MacroStep { Kind = StepKind.Wait, DurationMs = 0, RecordedMs = 8000 }), null);
+                    studio.ConvertToCondition(0, WaitForElement(30000));
+                    studio.Open(MacroFile.Read(MacroFile.Write(studio.Current)), null);
+                    studio.RevertCondition(0);
+                    Equal(StepKind.Wait, studio.Current.Steps[0].Kind, "0 s wait restored");
+                    Equal(8000, studio.Current.Steps[0].RecordedMs, "with its recorded time");
+                }
+
+                var full = new ConditionProbe
+                {
+                    At = new Point(5, 5), ElementName = "Baixar PDF", ControlType = "Button", Rgb = 0x3A6BD1,
+                    Dialog = new WindowRef { Class = "#32770", Title = "Salvar como" }
+                };
+                using (var dialog = new MacroStudio.ConditionDialog(full, 30000)) { dialog.CreateControl(); }
+                using (var dialog = new MacroStudio.ConditionDialog(new ConditionProbe(), 30000)) { dialog.CreateControl(); }
+                True(MacroStudio.ConditionDialog.TypeLabel("Button") == Loc.T("cond.type.Button"), "control types in plain words");
+                Equal("Calendar", MacroStudio.ConditionDialog.TypeLabel("Calendar"), "unknown types as they are");
+            });
+
+            Test("conditions: colour tolerance", () =>
+            {
+                True(MacroConditions.Close(0x3A6BD1, 0x3A6BD1 + 0x101010), "within 24 per channel");
+                True(!MacroConditions.Close(0x3A6BD1, 0x3A6BD1 + 0x190000), "red 25 off");
+                True(!MacroConditions.Close(0x000000, 0x000019), "blue 25 off");
+            });
         }
 
         // ------------------------------------------------------------------ studio window
@@ -128,6 +298,8 @@ namespace VClicker.Tests
             public string[] Snapshot() { lock (gate) return log.ToArray(); }
 
             public double MsOf(int index) { lock (gate) return (stamps[index] - stamps[0]) * 1000.0 / System.Diagnostics.Stopwatch.Frequency; }
+
+            public long StampOf(int index) { lock (gate) return stamps[index]; }
         }
 
         private static MacroCheckResult Ok(MacroStep step) => new MacroCheckResult
