@@ -735,6 +735,18 @@ namespace VClicker.Tests
                                 logged = File.ReadAllText(RunLog.DailyPath(studioIni));
                             True(logged.Contains("\"kind\":\"macro\"") && logged.Contains("\"reason\":\"Completed\"") && logged.Contains("\"kind\":\"Type\""), logged);
                             True(!logged.Contains("Al1"), "never what was typed");
+
+                            // Developer Mode: a command's run cut short by closing the window is exit code 1, and the log says so.
+                            var waiting = new Macro { Name = "Wait", ExeName = studio.Current.ExeName };
+                            waiting.Steps.Add(new MacroStep { Kind = StepKind.Wait, DurationMs = 60000 });
+                            string waitFile = Path.Combine(MacroFile.Folder(studioIni), "Wait.vcmacro"), commandLog = Path.Combine(Path.GetDirectoryName(studioIni), "cmd.jsonl");
+                            MacroFile.Save(waiting, waitFile);
+                            Equal(-1, host.RunCommand(CommandLine.Parse(new[] { "--macro", waitFile, "--log", commandLog })), "the command's run started");
+                            True(studio.Busy, "running");
+                            host.Close();
+                            Equal(ExitCodes.Stopped, host.ExitCode, "closed before the end: stopped, not done");
+                            string commandLogged = File.ReadAllText(commandLog);
+                            True(commandLogged.Contains("\"event\":\"run.stop\"") && commandLogged.Contains("\"reason\":\"Manual\""), commandLogged);
                             studio.Dispose(); // unsaved on purpose: closing would ask to save
                         }
                     }

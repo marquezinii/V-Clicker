@@ -59,6 +59,9 @@ namespace VClicker
         // which run a command line started (0 = none, 1 = the clicker, 2 = a macro).
         private RunLog clickLog;
         private int commandRun;
+        // The command's --log file: for its own run only, cleared when the command ends.
+        private string commandLogPath;
+        private bool closing;
 
         /// <summary>What the command line asked for (null = nothing).</summary>
         internal CommandLine Command;
@@ -1178,7 +1181,7 @@ namespace VClicker
         /// <summary>Where this run is logged: the command's --log file, else Developer Mode's daily file; null = nowhere.</summary>
         internal RunLog OpenLog()
         {
-            string path = Command?.LogPath ?? (settings.DeveloperMode ? RunLog.DailyPath(settingsPath) : null);
+            string path = commandLogPath ?? (settings.DeveloperMode ? RunLog.DailyPath(settingsPath) : null);
             return path == null ? null : new RunLog(path);
         }
 
@@ -1189,6 +1192,7 @@ namespace VClicker
         internal int RunCommand(CommandLine command)
         {
             Command = command;
+            commandLogPath = command.LogPath;
             if (command.Profile != null)
             {
                 AppProfile profile = Profiles.List(profileFolder).FirstOrDefault(p =>
@@ -1214,6 +1218,7 @@ namespace VClicker
             opened.Open(macro, file);
             opened.CommandValues = command.Vars;
             opened.BeginRun();
+            opened.CommandValues = null; // a refused start must not hand them to a later run
             if (!opened.Busy) return CommandFailed(ExitCodes.NotStarted, null); // the Studio says why
             commandRun = 2;
             return -1;
@@ -1235,6 +1240,7 @@ namespace VClicker
                 Program.Say(message);
             }
             OpenLog()?.Write("command.end", "code", code, "message", message);
+            commandLogPath = null;
             return code;
         }
 
@@ -1243,7 +1249,8 @@ namespace VClicker
         {
             ExitCode = code;
             commandRun = 0;
-            if (Command != null && Command.ExitWhenDone) BeginInvoke(new Action(Close));
+            commandLogPath = null;
+            if (Command != null && Command.ExitWhenDone && !closing) BeginInvoke(new Action(Close));
         }
 
         /// <summary>The Studio's run ended (a command may be waiting for it).</summary>
@@ -1796,14 +1803,24 @@ namespace VClicker
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            closing = true;
             if (studio != null && !studio.IsDisposed)
             {
                 studio.Close(); // asks to save unsaved changes
                 if (studio != null && !studio.IsDisposed && studio.Visible)
                 {
                     e.Cancel = true;
+                    closing = false;
                     return;
                 }
+            }
+            // The engine's stop is never handled once the window is gone: a run cut short here is "stopped".
+            if (engine.Phase != EnginePhase.Idle)
+            {
+                clickLog?.Write("run.stop", "kind", "clicker", "reason", StopReason.Manual.ToString(), "clicks", engine.Clicks,
+                                "elapsedMs", (long)engine.SessionElapsed.TotalMilliseconds);
+                clickLog = null;
+                if (commandRun == 1) FinishCommand(ExitCodes.Stopped);
             }
             engine.Stop();
             ReadUi();

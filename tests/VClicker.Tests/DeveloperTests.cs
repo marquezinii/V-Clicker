@@ -137,6 +137,37 @@ namespace VClicker.Tests
                 finally { Directory.Delete(dir, true); }
             });
 
+            Test("command line: an empty or invalid --log is refused up front; a bad log path never throws", () =>
+            {
+                foreach (string bad in new[] { "", "   ", "a|b.jsonl" })
+                    True(CommandLine.Parse(new[] { "--macro", "x", "--log", bad }).Error != null, "rejected: '" + bad + "'");
+                new RunLog("a|b.jsonl").Write("run.start"); // no exception
+                new RunLog("").Write("run.start");
+            });
+
+            Test("command line: --log is for the command's run only, not the runs after it", () =>
+            {
+                string dir = Path.Combine(Path.GetTempPath(), "vclicker-cli-" + Guid.NewGuid().ToString("N"));
+                string ini = Path.Combine(dir, "settings.ini"), log = Path.Combine(dir, "cmd.jsonl");
+                Directory.CreateDirectory(dir);
+                try
+                {
+                    new ClickSettings { StartDelaySeconds = 0, Sounds = false, RepeatCount = 2, IntervalMs = 10 }.Save(ini);
+                    using (var form = new MainForm(ini, new NullClickSink()) { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
+                    {
+                        IntPtr handle = form.Handle;
+                        Equal(ExitCodes.BadArguments, form.RunCommand(CommandLine.Parse(new[] { "--macro", "Nope", "--log", log })), "failed");
+                        form.Toggle(false); // a manual run afterwards
+                        DateTime until = DateTime.UtcNow.AddSeconds(5);
+                        while (form.ClickerBusy && DateTime.UtcNow < until) { Application.DoEvents(); System.Threading.Thread.Sleep(10); }
+                        Application.DoEvents();
+                    }
+                    string text = File.ReadAllText(log);
+                    True(text.Contains("command.end") && !text.Contains("run.start"), text);
+                }
+                finally { Directory.Delete(dir, true); }
+            });
+
             Test("command line: a missing macro, profile or variable value is exit code 2", () =>
             {
                 string dir = Path.Combine(Path.GetTempPath(), "vclicker-cli-" + Guid.NewGuid().ToString("N"));

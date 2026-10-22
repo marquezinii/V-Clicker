@@ -48,7 +48,10 @@ namespace VClicker
                     case "--wait-previous": break; // used by "restart as administrator"
                     case "--macro": cmd.Macro = Value(); break;
                     case "--profile": cmd.Profile = Value(); break;
-                    case "--log": cmd.LogPath = Value(); break;
+                    case "--log":
+                        cmd.LogPath = Value();
+                        if (cmd.LogPath != null && !RunLog.IsValidPath(cmd.LogPath)) cmd.Error = "--log needs a file path: " + cmd.LogPath;
+                        break;
                     case "--exit-when-done": cmd.ExitWhenDone = true; break;
                     case "--var":
                         string pair = Value();
@@ -158,7 +161,17 @@ namespace VClicker
 
         public RunLog(string path)
         {
-            this.path = Path.GetFullPath(path);
+            this.path = IsValidPath(path) ? Path.GetFullPath(path) : null; // a bad path logs nothing, never throws
+        }
+
+        public static bool IsValidPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            try { return Path.GetFileName(Path.GetFullPath(path)).Length > 0; }
+            catch (Exception error) when (error is ArgumentException || error is NotSupportedException || error is PathTooLongException || error is System.Security.SecurityException)
+            {
+                return false;
+            }
         }
 
         /// <summary>Developer Mode's daily file: Logs\v-clicker-YYYY-MM-DD.jsonl next to the settings.</summary>
@@ -169,6 +182,7 @@ namespace VClicker
         /// <param name="fields">Name, value, name, value…: strings, numbers, booleans or null.</param>
         public void Write(string name, params object[] fields)
         {
+            if (path == null) return;
             var line = new StringBuilder("{\"time\":");
             Value(line, DateTimeOffset.Now.ToString("yyyy-MM-dd'T'HH:mm:ss.fffzzz", CultureInfo.InvariantCulture));
             line.Append(",\"event\":");

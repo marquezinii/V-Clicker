@@ -1932,6 +1932,15 @@ namespace VClicker
                 }
             }
             else StopAll(MacroStopReason.Manual);
+            // The player's stop is never handled once the window is gone: log it and tell the main window now.
+            RunLog log = System.Threading.Volatile.Read(ref runLog);
+            if (log != null)
+            {
+                log.Write("run.stop", "kind", "macro", "reason", MacroStopReason.Manual.ToString(), "iteration", player.Iteration,
+                          "step", player.StepIndex + 1, "elapsedMs", runClock?.ElapsedMilliseconds ?? 0L);
+                System.Threading.Volatile.Write(ref runLog, null);
+                host?.MacroRunEnded(MacroStopReason.Manual);
+            }
             base.OnFormClosing(e);
         }
 
