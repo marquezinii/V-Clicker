@@ -156,7 +156,9 @@ namespace VClicker.Tests
                         form.Location = new Point(area.Right - form.Width, area.Top);
                         Find<Segmented>(form, s => s.AccessibleName == "Interface level").SelectedIndex = 1;
                         Application.DoEvents();
-                        True(form.Right <= area.Right, "right edge " + form.Right + " within " + area.Right);
+                        // A screen narrower than the window (1024 px CI runners): its left edge stays on the screen.
+                        True(form.Width > area.Width ? form.Left == area.Left : form.Right <= area.Right,
+                             "window " + form.Left + ".." + form.Right + " on screen " + area.Left + ".." + area.Right);
                     }
                 }
                 finally { File.Delete(ini); }
