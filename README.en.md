@@ -103,12 +103,19 @@ src/             the app (WinForms, .NET Framework 4.8, no third-party dependenc
   Settings.cs      .ini settings with validation and a safe fallback
   MainForm.cs      main window;  Controls.cs / Theme.cs / Icons.cs  keys, LEDs, display and drawn icons (DESIGN.md)
   Loc.cs           Portuguese and English strings
-tests/           dependency-free test runner (160 unit tests + 8 integration tests)
+tests/           dependency-free test runner (162 unit tests + 8 integration tests)
 assets/          app icon and brand identity (assets/brand: icon, logos and brand art)
 docs/            screenshots
 ```
 
 The click engine talks to Windows through a tiny interface (`IClickSink`), so the timing, stop, blocked-input and hold-mode tests run without moving your mouse.
+
+## Support
+
+V-Clicker is free, ad-free and open source. If it helps you, you can support the project (also through the **Support ♥** link in the app's footer):
+
+- **Ko-fi** (card or PayPal, from any country): [ko-fi.com/vemryx](https://ko-fi.com/vemryx)
+- **Pix** (Brazil, random key): `f1f20b16-c964-4465-9f45-2cb2a7647726`
 
 ## License
 

@@ -32,6 +32,8 @@
   <ItemGroup>
     <EmbeddedResource Include="..\assets\icon.ico" LogicalName="icon.ico" />
     <EmbeddedResource Include="..\assets\icon-256.png" LogicalName="icon-256.png" />
+    <!-- The static Pix QR code (made by assets/pix/make-pix-qr.py): no QR encoder in the app. -->
+    <EmbeddedResource Include="..\assets\pix\pix-qr.png" LogicalName="pix-qr.png" />
     <InternalsVisibleTo Include="V-Clicker.Tests" />
     <!-- UI Automation ships with .NET Framework: used to keep password fields out of macros. -->
     <Reference Include="UIAutomationClient" />

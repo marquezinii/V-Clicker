@@ -31,6 +31,7 @@ namespace VClicker.Tests
             if (Array.IndexOf(options, "review") >= 0) return TakeReview(output, language);
             if (Array.IndexOf(options, "profiles") >= 0) return TakeProfiles(output, language);
             if (Array.IndexOf(options, "ai") >= 0) return TakeAi(output, language);
+            if (Array.IndexOf(options, "support") >= 0) return TakeDialog(output, language, new SupportDialog());
             try
             {
                 new ClickSettings { Language = language, StartDelaySeconds = 0, Sounds = false, IntervalMs = 100, Advanced = Array.IndexOf(options, "simple") < 0 }.Save(ini);
@@ -210,6 +211,26 @@ namespace VClicker.Tests
                 new ImpactfulAction { Step = 11, Key = Keys.F4 | Keys.Alt }
             };
             using (var dialog = new SafetyReview(actions))
+            {
+                dialog.StartPosition = FormStartPosition.Manual;
+                dialog.Location = new Point(60, 40);
+                dialog.Show();
+                Pump(500);
+                Rectangle bounds = dialog.Bounds;
+                using (var picture = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb))
+                {
+                    dialog.DrawToBitmap(picture, new Rectangle(Point.Empty, bounds.Size));
+                    picture.Save(output, ImageFormat.Png);
+                }
+            }
+            return 0;
+        }
+
+        /// <summary>Any dialog as it opens (<c>--screenshot out.png pt support</c>).</summary>
+        private static int TakeDialog(string output, string language, Form dialog)
+        {
+            Loc.SetLanguage(language);
+            using (dialog)
             {
                 dialog.StartPosition = FormStartPosition.Manual;
                 dialog.Location = new Point(60, 40);

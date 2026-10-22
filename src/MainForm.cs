@@ -18,6 +18,8 @@ namespace VClicker
         private const int IdToggle = 1, IdStop = 2, IdCapture = 3;
         private const string RepoUrl = "https://github.com/marquezinii/V-Clicker";
         private const string MakerName = "Vemryx", MakerUrl = "https://vemryx.com";
+        /// <summary>The credits link that opens <see cref="SupportDialog"/> instead of a web page.</summary>
+        internal const string SupportLink = "support";
         private const string LeftLabels = "150", RightLabels = "116";
         private const int RowHeight = 32; // clusters and fields in the settings rows
         private static readonly Padding RowGap = Theme.Pad(0, 0, 0, 6);
@@ -45,7 +47,7 @@ namespace VClicker
         private Grid root;
         private Segmented segLevel, segQuickButton;
         private Label alsoNote;
-        private LinkLabel profilesLink;
+        private LinkLabel profilesLink, credits;
         private HotkeyBox hkToggle, hkStop, hkCapture;
         private LedCheck chkTop, chkTray, chkSounds, chkLock, chkHud, chkDev;
         private Segmented segLockMode, segHudCorner;
@@ -793,22 +795,18 @@ namespace VClicker
             footer.Margin = Theme.Pad(0, 8, 0, 0);
 
             // "Made by Vemryx  ·  GitHub  ·  v1.0.0": the maker's name and GitHub are links, the rest is plain.
-            var credits = new LinkLabel
+            credits = new LinkLabel
             {
                 AutoSize = true, Font = Theme.Legend(9f), BackColor = Theme.Bg, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Theme.Dim, UseCompatibleTextRendering = true,
                 LinkColor = Theme.Text, ActiveLinkColor = Theme.Cap, VisitedLinkColor = Theme.Text,
                 LinkBehavior = LinkBehavior.HoverUnderline, Margin = Padding.Empty
             };
-            Localize(() =>
+            Localize(ShowCredits);
+            credits.LinkClicked += (sender, e) =>
             {
-                string maker = Loc.F("madeBy", MakerName);
-                credits.Text = maker + "  ·  GitHub  ·  v" + Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
-                credits.Links.Clear();
-                credits.Links.Add(maker.IndexOf(MakerName, StringComparison.Ordinal), MakerName.Length, MakerUrl);
-                credits.Links.Add(credits.Text.IndexOf("GitHub", StringComparison.Ordinal), "GitHub".Length, RepoUrl);
-                tips.SetToolTip(credits, MakerUrl.Replace("https://", string.Empty));
-            });
-            credits.LinkClicked += (sender, e) => OpenUrl((string)e.Link.LinkData);
+                if ((string)e.Link.LinkData != SupportLink) OpenUrl((string)e.Link.LinkData);
+                else using (var dialog = new SupportDialog()) dialog.ShowDialog(this);
+            };
 
             adminLink = new LinkLabel
             {
@@ -849,6 +847,20 @@ namespace VClicker
 
             Row(footer, credits, profilesLink, adminLink);
             return footer;
+        }
+
+        /// <summary>"Made by Vemryx · GitHub · Support ♥ · v1.0.0"; the simple level's narrow footer leaves the version out.</summary>
+        private void ShowCredits()
+        {
+            string maker = Loc.F("madeBy", MakerName);
+            string support = Loc.T("support.link");
+            credits.Text = maker + "  ·  GitHub  ·  " + support +
+                           (settings.Advanced ? "  ·  v" + Assembly.GetExecutingAssembly().GetName().Version.ToString(3) : string.Empty);
+            credits.Links.Clear();
+            credits.Links.Add(maker.IndexOf(MakerName, StringComparison.Ordinal), MakerName.Length, MakerUrl);
+            credits.Links.Add(credits.Text.IndexOf("GitHub", StringComparison.Ordinal), "GitHub".Length, RepoUrl);
+            credits.Links.Add(credits.Text.IndexOf(support, StringComparison.Ordinal), support.Length, SupportLink);
+            tips.SetToolTip(credits, MakerUrl.Replace("https://", string.Empty));
         }
 
         private void BuildTray()
@@ -951,6 +963,7 @@ namespace VClicker
             root.ColumnStyles[1].Width = advanced ? Theme.Dp(380) : 0;
             // "Restart as admin" stays: refusals for an elevated app name it.
             studioButton.Visible = segSpeed.Visible = jitterRow.Visible = profilesLink.Visible = advanced;
+            ShowCredits();
             quickButtonRow.Visible = !advanced;
             segQuickButton.SetSelectedSilently((int)settings.Button);
             ShowSpeedMode();

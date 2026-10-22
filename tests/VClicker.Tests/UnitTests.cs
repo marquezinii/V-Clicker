@@ -23,6 +23,7 @@ namespace VClicker.Tests
             MacroTests.Run();
             ProfileTests.Run();
             AdaptiveTests.Run();
+            SupportTests.Run();
         }
 
         // ------------------------------------------------------------------ hotkeys

@@ -103,12 +103,19 @@ src/             o aplicativo (WinForms, .NET Framework 4.8, sem dependências d
   Settings.cs      configurações em .ini, com validação e fallback seguro
   MainForm.cs      janela principal;  Controls.cs / Theme.cs / Icons.cs  teclas, LEDs, display e ícones desenhados (DESIGN.md)
   Loc.cs           textos em português e inglês
-tests/           executor de testes sem dependências (160 testes unitários + 8 de integração)
+tests/           executor de testes sem dependências (162 testes unitários + 8 de integração)
 assets/          ícone do app e identidade visual (assets/brand: ícone, logos e artes da marca)
 docs/            capturas de tela
 ```
 
 O mecanismo de cliques fala com o Windows por uma interface mínima (`IClickSink`), por isso os testes de cronometragem, parada, bloqueio e modo segurar rodam sem mover o mouse.
+
+## Apoie
+
+O V-Clicker é gratuito, sem anúncios e de código aberto. Se ele te ajuda, você pode apoiar o projeto (também pelo link **Apoiar ♥** no rodapé do app):
+
+- **Ko-fi** (cartão ou PayPal, de qualquer país): [ko-fi.com/vemryx](https://ko-fi.com/vemryx)
+- **Pix** (chave aleatória): `f1f20b16-c964-4465-9f45-2cb2a7647726`
 
 ## Licença
 
