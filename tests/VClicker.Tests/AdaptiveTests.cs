@@ -127,6 +127,41 @@ namespace VClicker.Tests
                 finally { File.Delete(ini); }
             });
 
+            Test("simple mode: a Window Lock without an app is mentioned, and Restart as admin stays reachable", () =>
+            {
+                string ini = TempIni();
+                try
+                {
+                    new ClickSettings { Advanced = false, Language = "en", WindowLock = true }.Save(ini);
+                    using (MainForm form = Open(ini))
+                    {
+                        Label note = All(form).OfType<Label>().FirstOrDefault(l => l.Visible && l.Text.StartsWith("Also in effect"));
+                        True(note != null && note.Text.Contains("Window Lock (no app)"), "Start is refused for it: say why: " + note?.Text);
+                        if (!MainForm.IsElevated())
+                            True(Find<LinkLabel>(form, l => l.Text == Loc.T("link.admin")).Visible, "messages name this link: it is shown in simple too");
+                    }
+                }
+                finally { File.Delete(ini); }
+            });
+
+            Test("window: widening keeps it on the screen", () =>
+            {
+                string ini = TempIni();
+                try
+                {
+                    new ClickSettings { Advanced = false }.Save(ini);
+                    using (MainForm form = Open(ini))
+                    {
+                        Rectangle area = Screen.FromControl(form).WorkingArea;
+                        form.Location = new Point(area.Right - form.Width, area.Top);
+                        Find<Segmented>(form, s => s.AccessibleName == "Interface level").SelectedIndex = 1;
+                        Application.DoEvents();
+                        True(form.Right <= area.Right, "right edge " + form.Right + " within " + area.Right);
+                    }
+                }
+                finally { File.Delete(ini); }
+            });
+
             Test("simple mode: Start still clicks", () =>
             {
                 string ini = TempIni();

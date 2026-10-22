@@ -930,7 +930,8 @@ namespace VClicker
             SuspendLayout();
             rightColumn.Visible = advanced;
             root.ColumnStyles[1].Width = advanced ? Theme.Dp(380) : 0;
-            studioButton.Visible = segSpeed.Visible = jitterRow.Visible = profilesLink.Visible = adminLink.Visible = advanced;
+            // "Restart as admin" stays: refusals for an elevated app name it.
+            studioButton.Visible = segSpeed.Visible = jitterRow.Visible = profilesLink.Visible = advanced;
             quickButtonRow.Visible = !advanced;
             segQuickButton.SetSelectedSilently((int)settings.Button);
             ShowSpeedMode();
@@ -949,7 +950,7 @@ namespace VClicker
         private void UpdateAlsoNote()
         {
             var active = new List<string>();
-            if (settings.WindowLock && settings.LockExe.Length > 0) active.Add(Loc.F("also.lock", settings.LockName));
+            if (settings.WindowLock) active.Add(Loc.F("also.lock", settings.LockExe.Length > 0 ? settings.LockName : Loc.T("lock.none").ToLowerInvariant()));
             if (settings.UseFixedPosition) active.Add(Loc.F("also.fixed", settings.X, settings.Y));
             if (settings.RepeatCount > 0) active.Add(Loc.F("also.repeat", settings.RepeatCount.ToString("N0", CultureInfo.CurrentCulture)));
             if (settings.DoubleClick) active.Add(Loc.T("also.double"));
@@ -1649,6 +1650,7 @@ namespace VClicker
         /// </summary>
         internal void FitToScreen(Rectangle area)
         {
+            if (Right > area.Right) Left = Math.Max(area.Left, area.Right - Width); // the advanced level widens it
             if (Height <= area.Height)
             {
                 if (Bottom > area.Bottom || Top < area.Top) Top = Math.Max(area.Top, area.Bottom - Height);

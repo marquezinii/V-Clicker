@@ -22,7 +22,8 @@ Uma coluna só (a janela fica com cerca de metade da largura):
 7. Rodapé com os créditos.
 
 Some no simples: CPS/intervalo (fica sempre em CPS), variação aleatória, tipo, repetições, modo do atalho, atraso,
-posição, Window Lock, opções da janela, o botão do Macro Studio e os links Perfis e Reiniciar como admin.
+posição, Window Lock, opções da janela, o botão do Macro Studio e o link Perfis. "Reiniciar como admin" fica,
+porque as mensagens sobre aplicativos que rodam como administrador o citam.
 
 ## Honestidade: o que continua valendo
 
