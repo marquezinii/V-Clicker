@@ -1690,7 +1690,9 @@ namespace VClicker
         /// </summary>
         internal static string CommandLineFor(string exe, string file, IEnumerable<string> variables)
         {
-            string Single(string text) => "'" + text.Replace("'", "''") + "'";
+            // PowerShell closes a single-quoted string at ' and at the typographic ‘ ’ ‚ ‛ too: double every one of them.
+            string Single(string text) =>
+                "'" + System.Text.RegularExpressions.Regex.Replace(text, "['‘’‚‛]", m => m.Value + m.Value) + "'";
             IEnumerable<string> args = new[] { "--macro", "\"" + file + "\"" }
                 .Concat(variables.SelectMany(n => new[] { "--var", n + "=" }))
                 .Concat(new[] { "--exit-when-done" });
