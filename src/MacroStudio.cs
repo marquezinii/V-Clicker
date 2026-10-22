@@ -827,10 +827,11 @@ namespace VClicker
             if (step.Target != null && (step.Kind == StepKind.Click || step.Kind == StepKind.DoubleClick)) TargetDetail(body, step, index, editable);
             else if (step.IsMouse)
             {
-                // Typing a point gives a proposed click its place, like a capture.
+                // Typing both X and Y gives a proposed click its place, like a capture; one alone would click at an edge.
                 if (step.WaitsForPoint) Full(body, Note(Loc.T("banner.needsPoint"), Theme.Warning, 9f));
-                Pair(body, "X", Coordinate(step.At.X, v => { step.At = new Point(v, step.At.Y); step.NeedsPoint = false; }, editable));
-                Pair(body, "Y", Coordinate(step.At.Y, v => { step.At = new Point(step.At.X, v); step.NeedsPoint = false; }, editable));
+                bool typedX = false, typedY = false;
+                Pair(body, "X", Coordinate(step.At.X, v => { step.At = new Point(v, step.At.Y); typedX = true; if (typedY) step.NeedsPoint = false; }, editable));
+                Pair(body, "Y", Coordinate(step.At.Y, v => { step.At = new Point(step.At.X, v); typedY = true; if (typedX) step.NeedsPoint = false; }, editable));
                 if (step.Kind == StepKind.Drag)
                 {
                     Pair(body, "studio.toX", Coordinate(step.To.X, v => step.To = new Point(v, step.To.Y), editable));
@@ -1269,6 +1270,7 @@ namespace VClicker
                 host?.SaveSettings();
             }
             dirty = false;
+            aiNote = null; // saved: it is the user's macro now
             SetMessage(Loc.T("mmsg.saved"), Theme.Success);
             RefreshMacroList();
             UpdateTitle();

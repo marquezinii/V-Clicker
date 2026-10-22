@@ -224,6 +224,74 @@ namespace VClicker.Tests
                 }
             });
 
+            Test("pending point: typing only X (or only Y) does not give it a place; both do", () =>
+            {
+                string ini = Path.Combine(Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                using (var studio = new MacroStudio(null, new ClickSettings(), ini))
+                {
+                    Macro macro = Steps(1, new MacroStep { Kind = StepKind.Click, NeedsPoint = true });
+                    macro.ExeName = "Game.exe";
+                    studio.OpenProposal(new AiProposal { Macro = macro });
+                    studio.Selected = 0;
+                    IEnumerable<Control> AllOf(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(AllOf(c)));
+                    NumberField[] xy = AllOf(studio).OfType<NumberField>().Where(f => f.Minimum == -MacroStep.MaxCoordinate).ToArray();
+                    Equal(2, xy.Length, "X and Y");
+                    void Type(NumberField field, string text) { ((TextBox)field.Controls[0]).Text = text; field.Commit(); }
+                    Type(xy[0], "300");
+                    True(studio.Current.Steps[0].NeedsPoint, "X alone would click at (300, 0): still waiting");
+                    Type(xy[1], "200");
+                    True(!studio.Current.Steps[0].NeedsPoint && studio.Current.Steps[0].At == new Point(300, 200), "both: placed");
+                }
+            });
+
+            Test("AI key: a key that cannot be a header is refused before sending; it is kept only after it works", () =>
+            {
+                bool called = false;
+                string message = null;
+                try
+                {
+                    MacroAi.Generate("sk-ant-é\n", "x", "Game", Bound(), CancellationToken.None,
+                        (r, c) => { called = true; return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)); }).Wait();
+                }
+                catch (AggregateException error) when (error.InnerException is AiException ai) { message = ai.Message; }
+                Equal(Loc.T("ai.err.key"), message, "refused");
+                True(!called, "nothing was sent");
+
+                var settings = new ClickSettings();
+                string failure = "A API recusou a chave.";
+                var proposal = new AiProposal { Macro = Steps(1, new MacroStep { Kind = StepKind.Wait }) };
+                using (var dialog = new AiDialog(settings, null, "Game", Bound())
+                {
+                    Generator = (text, app, cancel) => failure == null ? Task.FromResult(proposal) : throw new AiException(failure)
+                })
+                {
+                    IntPtr handle = dialog.Handle;
+                    dialog.Description = "x";
+                    dialog.KeyText = "sk-ant-wrong";
+                    dialog.GenerateAsync().Wait();
+                    Equal(string.Empty, settings.AiKey, "a key that failed is not kept");
+                    failure = null;
+                    dialog.KeyText = "sk-ant-right";
+                    dialog.GenerateAsync().Wait();
+                    Equal("sk-ant-right", ApiKeys.Unprotect(settings.AiKey), "kept once it worked");
+                    Equal(string.Empty, dialog.KeyText, "and no longer held in the field");
+                }
+            });
+
+            Test("AI window: an unexpected failure is shown, never a crash", () =>
+            {
+                using (var dialog = new AiDialog(new ClickSettings(), null, "Game", Bound())
+                {
+                    Generator = (text, app, cancel) => throw new InvalidOperationException("boom")
+                })
+                {
+                    IntPtr handle = dialog.Handle;
+                    dialog.Description = "x";
+                    dialog.GenerateAsync().Wait();
+                    True(dialog.StatusText.Contains("boom") && dialog.Result == null, dialog.StatusText);
+                }
+            });
+
             Test("studio: a proposal opens unsaved, with the AI note, and nothing runs", () =>
             {
                 Loc.SetLanguage("en");

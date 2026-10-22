@@ -120,6 +120,8 @@ namespace VClicker
         public static async Task<AiProposal> Generate(string apiKey, string description, string appName, Macro bound, CancellationToken cancel,
                                                       Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send = null)
         {
+            // An API key is printable ASCII; anything else could not even be sent as a header.
+            if (string.IsNullOrEmpty(apiKey) || apiKey.Any(ch => ch < '!' || ch > '~')) throw new AiException(Loc.T("ai.err.key"));
             using (var request = new HttpRequestMessage(HttpMethod.Post, Endpoint))
             {
                 request.Headers.Add("x-api-key", apiKey);

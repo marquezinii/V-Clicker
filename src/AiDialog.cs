@@ -103,6 +103,9 @@ namespace VClicker
             keyField.Visible = ((Control)keyField.Tag).Visible = !saved;
         }
 
+        /// <summary>The key field (tests set it).</summary>
+        internal string KeyText { get => keyField.Box.Text; set => keyField.Box.Text = value; }
+
         /// <summary>The description as typed (tests set it).</summary>
         internal string Description { get => description.Box.Text; set => description.Box.Text = value; }
 
@@ -118,16 +121,11 @@ namespace VClicker
                 Say(Loc.T("ai.needText"), Theme.Warning);
                 return;
             }
-            string key = ApiKeys.Unprotect(settings.AiKey) ?? keyField.Box.Text.Trim();
+            string saved = ApiKeys.Unprotect(settings.AiKey), key = saved ?? keyField.Box.Text.Trim();
             if (key.Length == 0 && Generator == null)
             {
                 Say(Loc.T("ai.needKey"), Theme.Warning);
                 return;
-            }
-            if (keyField.Visible && key.Length > 0)
-            {
-                settings.AiKey = ApiKeys.Protect(key); // kept only once it is used; Forget removes it
-                saveSettings?.Invoke();
             }
             working = new CancellationTokenSource();
             generate.Enabled = description.Enabled = keyField.Enabled = false;
@@ -137,6 +135,12 @@ namespace VClicker
                 Result = Generator != null
                     ? await Generator(text, appName, working.Token)
                     : await MacroAi.Generate(key, text, appName, bound, working.Token);
+                if (saved == null && key.Length > 0)
+                {
+                    settings.AiKey = ApiKeys.Protect(key); // kept only once it worked; Forget removes it
+                    saveSettings?.Invoke();
+                    keyField.Box.Text = string.Empty;
+                }
                 DialogResult = DialogResult.OK;
             }
             catch (AiException error)
@@ -144,6 +148,10 @@ namespace VClicker
                 Say(error.Message, Theme.Warning);
             }
             catch (OperationCanceledException) { } // closed while waiting
+            catch (Exception error) // anything else: say it, never take the app down from a click handler
+            {
+                Say(Loc.F("ai.err.other", error.Message), Theme.Warning);
+            }
             finally
             {
                 working.Dispose();
