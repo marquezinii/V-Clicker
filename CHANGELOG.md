@@ -22,6 +22,16 @@ All notable changes to this project are documented here. The format follows
   monogram and brand art). The previous cyan/violet brand files were removed.
 
 ### Added
+- **Developer Mode** (see `docs/superpowers/specs/2026-10-21-developer-mode-design.md` and `docs/developer.md`):
+  - Command line: `--macro <file|name>` runs a macro through the Macro Studio's Run, `--profile <exe|name>` starts
+    an app's profile through Start, with `--var name=value`, `--log file.jsonl` and `--exit-when-done` (exit codes:
+    0 done, 1 stopped, 2 bad arguments, 3 already open, 4 did not start, 10+ other stop). Same window and safeguards
+    as the buttons (F8, Window Lock, SafeClick review, duration limit); with V-Clicker already open it does nothing.
+  - `{{name}}` variables in typed text, from `--var`, `var.name=` header lines or a prompt in the Studio, plus
+    `{{iteration}}`, `{{date}}` and `{{time}}`.
+  - Structured logs (JSON Lines: `run.start`, `step`, `run.stop`) to `Logs\v-clicker-YYYY-MM-DD.jsonl` when the new
+    *Developer mode* option is on, or to `--log`; typed text and variable values are never logged.
+  - A *Copy command* button in the Macro Studio (Developer mode) and a documented `.vcmacro` / `.vcprofile` format.
 - **Simple and advanced interface** (see `docs/superpowers/specs/2026-10-21-adaptive-interface-design.md`): a
   Simple | Advanced switch at the top of the main window. Simple is one narrow column (display, Start, speed in CPS
   with the presets, mouse button, hotkeys); Advanced is the full window. New installs start simple; existing settings

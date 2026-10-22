@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Security.Principal;
 using System.Windows.Forms;
@@ -46,13 +47,26 @@ namespace VClicker
         private Label alsoNote;
         private LinkLabel profilesLink;
         private HotkeyBox hkToggle, hkStop, hkCapture;
-        private LedCheck chkTop, chkTray, chkSounds, chkLock, chkHud;
+        private LedCheck chkTop, chkTray, chkSounds, chkLock, chkHud, chkDev;
         private Segmented segLockMode, segHudCorner;
         private Label lockAppLabel;
         private KeyButton lockChoose;
         private LinkLabel adminLink;
         private KeyButton studioButton;
         private MacroStudio studio;
+
+        // Developer Mode (docs/superpowers/specs/2026-10-21-developer-mode-design.md): the log of the clicker's run, and
+        // which run a command line started (0 = none, 1 = the clicker, 2 = a macro).
+        private RunLog clickLog;
+        private int commandRun;
+        // The command's --log file: for its own run only, cleared when the command ends.
+        private string commandLogPath;
+        private bool closing;
+
+        /// <summary>What the command line asked for (null = nothing).</summary>
+        internal CommandLine Command;
+        /// <summary>The process exit code (a command's result).</summary>
+        internal int ExitCode;
 
         // Window Lock: the exact window this run is bound to (Zero = no lock).
         private IntPtr lockedWindow;
@@ -755,9 +769,13 @@ namespace VClicker
             Localize(() => segHudCorner.Items = new[] { Loc.T("corner.0"), Loc.T("corner.1"), Loc.T("corner.2"), Loc.T("corner.3") });
             segHudCorner.SelectedChanged += OnConfigChanged;
 
+            chkDev = Check("opt.dev");
+            Localize(() => tips.SetToolTip(chkDev, Loc.T("opt.dev.tip")));
+
             Row(body, chkTop, chkSounds);
             FullRow(body, chkTray);
             Row(body, chkHud, segHudCorner);
+            FullRow(body, chkDev);
             FullRow(column, body);
         }
 
@@ -912,6 +930,7 @@ namespace VClicker
             chkLock.Checked = settings.WindowLock;
             segLockMode.SetSelectedSilently(settings.LockStopOnFocusLoss ? 1 : 0);
             chkHud.Checked = settings.Hud;
+            chkDev.Checked = settings.DeveloperMode;
             segHudCorner.SetSelectedSilently((int)settings.HudCorner);
             ShowLockApp();
             loading = false;
@@ -985,6 +1004,7 @@ namespace VClicker
             settings.WindowLock = chkLock.Checked;
             settings.LockStopOnFocusLoss = segLockMode.SelectedIndex == 1;
             settings.Hud = chkHud.Checked;
+            settings.DeveloperMode = chkDev.Checked;
             settings.HudCorner = (HudCorner)segHudCorner.SelectedIndex;
         }
 
@@ -1157,6 +1177,91 @@ namespace VClicker
 
         private bool StudioBusy => studio != null && !studio.IsDisposed && studio.Busy;
 
+        // ------------------------------------------------------------------ developer mode
+
+        /// <summary>Where this run is logged: the command's --log file, else Developer Mode's daily file; null = nowhere.</summary>
+        internal RunLog OpenLog()
+        {
+            string path = commandLogPath ?? (settings.DeveloperMode ? RunLog.DailyPath(settingsPath) : null);
+            return path == null ? null : new RunLog(path);
+        }
+
+        /// <summary>
+        /// Does what the command line asked, the way the Start or Run button would (every safeguard included).
+        /// </summary>
+        /// <returns>The exit code if the command ended here; -1 while its run goes on.</returns>
+        internal int RunCommand(CommandLine command)
+        {
+            Command = command;
+            commandLogPath = command.LogPath;
+            if (command.Profile != null)
+            {
+                AppProfile profile = Profiles.List(profileFolder).FirstOrDefault(p =>
+                    p.ExeName.Equals(command.Profile, StringComparison.OrdinalIgnoreCase) || p.Name.Equals(command.Profile, StringComparison.OrdinalIgnoreCase));
+                if (profile == null) return CommandFailed(ExitCodes.BadArguments, Loc.F("cli.noProfile", command.Profile));
+                // Hold mode clicks while the hotkey is held: nothing holds it here, so it would click until F8.
+                if (profile.Settings.HoldMode) return CommandFailed(ExitCodes.BadArguments, Loc.F("cli.hold", profile.Name));
+                UseLockApp(new AppWindow { ExeName = profile.ExeName, DisplayName = profile.Name });
+                StartClicking(false);
+                if (engine.Phase == EnginePhase.Idle) return CommandFailed(ExitCodes.NotStarted, null); // the display says why
+                commandRun = 1;
+                return -1;
+            }
+            string file = MacroPath(command.Macro);
+            if (file == null) return CommandFailed(ExitCodes.BadArguments, Loc.F("cli.noMacro", command.Macro));
+            Macro macro;
+            try { macro = MacroFile.Load(file); }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is FormatException)
+            {
+                return CommandFailed(ExitCodes.BadArguments, Loc.F("mmsg.openFailed", Path.GetFileName(file)));
+            }
+            List<string> missing = MacroVariables.Missing(macro, command.Vars);
+            if (missing.Count > 0) return CommandFailed(ExitCodes.BadArguments, Loc.F("cli.noValue", string.Join(", ", missing)));
+            MacroStudio opened = OpenStudio();
+            opened.Open(macro, file);
+            opened.CommandValues = command.Vars;
+            opened.BeginRun();
+            opened.CommandValues = null; // a refused start must not hand them to a later run
+            if (!opened.Busy) return CommandFailed(ExitCodes.NotStarted, null); // the Studio says why
+            commandRun = 2;
+            return -1;
+        }
+
+        /// <summary>A file path, or the name of a macro in the Macros folder; null = no such file.</summary>
+        private string MacroPath(string macro)
+        {
+            if (File.Exists(macro)) return Path.GetFullPath(macro);
+            string saved = Path.Combine(MacroFile.Folder(settingsPath), MacroFile.SafeFileName(macro) + MacroFile.Extension);
+            return File.Exists(saved) ? saved : null;
+        }
+
+        private int CommandFailed(int code, string message)
+        {
+            if (message != null)
+            {
+                ShowNotice(message, Theme.Warning, 0);
+                Program.Say(message);
+            }
+            OpenLog()?.Write("command.end", "code", code, "message", message);
+            commandLogPath = null;
+            return code;
+        }
+
+        /// <summary>The command's run ended: its exit code, and the window closes if asked to.</summary>
+        private void FinishCommand(int code)
+        {
+            ExitCode = code;
+            commandRun = 0;
+            commandLogPath = null;
+            if (Command != null && Command.ExitWhenDone && !closing) BeginInvoke(new Action(Close));
+        }
+
+        /// <summary>The Studio's run ended (a command may be waiting for it).</summary>
+        internal void MacroRunEnded(MacroStopReason reason)
+        {
+            if (commandRun == 2) FinishCommand(ExitCodes.For(reason));
+        }
+
         internal bool ClickerBusy => engine.Phase != EnginePhase.Idle;
 
         // ------------------------------------------------------------------ run control
@@ -1213,6 +1318,10 @@ namespace VClicker
             sentRate.Reset();
             ShowHint();
             if (!engine.Start(plan)) return;
+            clickLog = OpenLog();
+            clickLog?.Write("run.start", "kind", "clicker", "cps", Math.Round(Interval.ClicksPerSecond(settings.IntervalMs), 3),
+                            "button", settings.Button.ToString(), "double", settings.DoubleClick, "repeat", settings.RepeatCount,
+                            "app", settings.WindowLock ? settings.LockExe : null);
 
             UpdateEnabledState();
             UpdateStartButton();
@@ -1320,6 +1429,10 @@ namespace VClicker
                 return;
             }
             lastStop = reason;
+            clickLog?.Write("run.stop", "kind", "clicker", "reason", reason.ToString(), "clicks", engine.Clicks,
+                            "elapsedMs", (long)engine.SessionElapsed.TotalMilliseconds);
+            clickLog = null;
+            if (commandRun == 1) FinishCommand(ExitCodes.For(reason));
             UpdateEnabledState();
             UpdateStartButton();
             string name = settings.LockName;
@@ -1643,6 +1756,12 @@ namespace VClicker
             base.OnShown(e);
             FitToScreen(Screen.FromControl(this).WorkingArea);
             Invalidate(true);
+            if (Command != null && Command.HasAction)
+                BeginInvoke(new Action(() =>
+                {
+                    int code = RunCommand(Command);
+                    if (code >= 0) FinishCommand(code);
+                }));
         }
 
         /// <summary>
@@ -1690,14 +1809,24 @@ namespace VClicker
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            closing = true;
             if (studio != null && !studio.IsDisposed)
             {
                 studio.Close(); // asks to save unsaved changes
                 if (studio != null && !studio.IsDisposed && studio.Visible)
                 {
                     e.Cancel = true;
+                    closing = false;
                     return;
                 }
+            }
+            // The engine's stop is never handled once the window is gone: a run cut short here is "stopped".
+            if (engine.Phase != EnginePhase.Idle)
+            {
+                clickLog?.Write("run.stop", "kind", "clicker", "reason", StopReason.Manual.ToString(), "clicks", engine.Clicks,
+                                "elapsedMs", (long)engine.SessionElapsed.TotalMilliseconds);
+                clickLog = null;
+                if (commandRun == 1) FinishCommand(ExitCodes.Stopped);
             }
             engine.Stop();
             ReadUi();

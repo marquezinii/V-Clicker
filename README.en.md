@@ -28,6 +28,7 @@ A single `.exe`: no installer, no telemetry, no network.
 - **Wait until… (Conditional Click)**, in Macro Studio: turn a recorded wait (or insert one from scratch) into "wait until the *Download PDF* button is available", "until this point's colour shows up" or "until the *Save as* window opens". The macro moves on as soon as the condition is confirmed (two reads in a row) and stops before the next step if the time limit runs out. Time with another window in front does not count; a doubtful read never lets the macro through. You can go back to the original wait. An element is waited for wherever it is in the window; a colour is watched at a fixed point.
 - **Smart target**, in Macro Studio: a recorded click looks for *what* to click instead of *where*. Point at the button and press F7; the V-Clicker recognizes it **by name** (Windows accessibility; works in Chrome/Edge and most programs) or **by appearance** (a small region of the screen, for games and programs without names) and shows a preview. Before every click, the macro looks for the target and only clicks when it finds **exactly one**, still, enabled and itself under the click point. Two candidates, a disabled or covered target, or nothing found within the time limit (10 s by default): the macro stops without clicking and says why. The recorded point is never a fallback, but you can go back to it.
 - **SafeClick (simulation and review)**, in Macro Studio: *Simulate* captures the app's window (without bringing it to the front) and shows, step by step, where each click would land, the text that would be typed and the shortcuts, with each target and condition checked **in the capture**. Nothing is clicked, typed or sent to the app; a capture that cannot be trusted (hardware-accelerated games often come out blank) shows as inconclusive, never as a confirmation. Before the first run of a macro with potentially impactful actions (Delete, Shift+Delete, Alt+F4, Ctrl+W, Ctrl+Shift+Esc), a safety review appears; once approved, that version of the macro does not ask again (any change, or an imported copy, asks again). Each macro can also have an optional **duration limit** that ends the run, pauses included.
+- **Developer mode**: run a macro or a profile from the command line (`V-Clicker.exe --macro Report --var month=10 --exit-when-done`) with an exit code for scripts and tests; `{{name}}` variables in typed text; structured logs (JSON Lines) of every run that never record what was typed. Macro and profile formats are documented in [`docs/developer.md`](docs/developer.md) (Portuguese).
 - **Random variation** (±0–50 %) for less mechanical clicking.
 - **Left, middle or right button**, **single or double** click.
 - **Repeat forever or N times** (up to 1 billion); it stops by itself when done.
@@ -95,11 +96,12 @@ src/             the app (WinForms, .NET Framework 4.8, no third-party dependenc
   ImageTarget.cs   image recognition (normalized correlation in 8 px cells; pure, testable functions)
   Hud.cs           on-screen indicator (separate window, click-through, never takes focus)
   Profiles.cs / ProfilesDialog.cs  per-app Window Lock profiles: the .vcprofile file, export and import
+  Developer.cs     developer mode: command line, exit codes, {{name}} variables and the JSON Lines log
   Hotkey.cs        global hotkeys (RegisterHotKey) and validation
   Settings.cs      .ini settings with validation and a safe fallback
   MainForm.cs      main window;  Controls.cs / Theme.cs / Icons.cs  keys, LEDs, display and drawn icons (DESIGN.md)
   Loc.cs           Portuguese and English strings
-tests/           dependency-free test runner (136 unit tests + 8 integration tests)
+tests/           dependency-free test runner (147 unit tests + 8 integration tests)
 assets/          app icon and brand identity (assets/brand: icon, logos and brand art)
 docs/            screenshots
 ```

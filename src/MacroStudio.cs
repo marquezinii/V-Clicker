@@ -67,7 +67,15 @@ namespace VClicker
         private long flashUntil;
 
         private ChoiceBox macroList;
-        private KeyButton bNew, bRename, bDelete, bSave, bRecord, bRun, bSimulate, bStop;
+        private KeyButton bNew, bRename, bDelete, bSave, bRecord, bRun, bSimulate, bStop, bCommand;
+
+        /// <summary>Values the command line gave for the next run's {{variables}}.</summary>
+        internal IDictionary<string, string> CommandValues;
+        // What was typed for a variable without a value, offered again next time (this session only).
+        private readonly Dictionary<string, string> rememberedValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // The structured log of the run in progress (Developer Mode, or a command's --log); null = none.
+        private RunLog runLog;
+        private Stopwatch runClock;
         private NumberField fRepeat, fLimit;
         private LedCheck chkForever, chkLimit;
         private LedBadge status;
@@ -86,6 +94,8 @@ namespace VClicker
             this.settings = settings;
             folder = MacroFile.Folder(settingsPath);
             player = new MacroPlayer(new SendInputInputSink());
+            // Kind and position only: never what is typed.
+            player.StepStarted += (index, pass, step) => System.Threading.Volatile.Read(ref runLog)?.Write("step", "index", index + 1, "iteration", pass, "kind", step.Kind.ToString());
             player.Stopped += reason =>
             {
                 if (!IsHandleCreated || IsDisposed) return;
@@ -472,6 +482,8 @@ namespace VClicker
             bRun = Button("studio.run", ButtonKind.Primary, delegate { BeginRun(); }, 118);
             bSimulate = Button("studio.simulate", ButtonKind.Secondary, delegate { BeginSimulation(); }, 110);
             bStop = Button("studio.stop", ButtonKind.Secondary, delegate { StopAll(MacroStopReason.Manual); }, 94);
+            bCommand = Button("studio.command", ButtonKind.Secondary, delegate { CopyCommand(); }, 150);
+            bCommand.Visible = settings.DeveloperMode;
             var repeatLabel = new Label
             {
                 AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Font = Theme.Legend(9.75f),
@@ -485,7 +497,7 @@ namespace VClicker
             chkForever = new LedCheck { Margin = Theme.Pad(0, 5, 0, 0) };
             Localize(() => chkForever.Text = Loc.T("studio.forever"));
             chkForever.CheckedChanged += delegate { if (!loadingUi) SetRepeat(); };
-            run.Controls.AddRange(new Control[] { bRecord, bRun, bSimulate, bStop });
+            run.Controls.AddRange(new Control[] { bRecord, bRun, bSimulate, bStop, bCommand });
 
             // Third: how many times, and how long at most (SafeClick: an explicit, optional duration limit).
             FlowLayoutPanel options = Bar();
@@ -1448,6 +1460,15 @@ namespace VClicker
                 Refuse(Loc.F("mmsg.hotkeyStep", i + 1, pressed));
                 return;
             }
+            // {{variables}}: the command line's values, the file's, then asked for (and remembered for this session).
+            Dictionary<string, string> values = MacroVariables.Resolve(macro, CommandValues ?? new Dictionary<string, string>());
+            CommandValues = null;
+            foreach (string name in MacroVariables.Missing(macro, values))
+            {
+                string value = Dialogs.Prompt(this, Loc.F("ask.variable", name), rememberedValues.TryGetValue(name, out string last) ? last : string.Empty);
+                if (value == null) return;
+                values[name] = rememberedValues[name] = value;
+            }
             if (!Reviewed()) return;
             List<AppWindow> windows = ListWindows(macro.ExeName);
             if (windows.Count == 0)
@@ -1480,11 +1501,16 @@ namespace VClicker
             if (!player.Start(macro, step => MacroTarget.Check(handle, process, step), CountdownMs,
                               (step, cancel) => MacroConditions.Read(handle, process, step, cancel),
                               (step, cancel) => SmartTargets.Find(handle, process, step, cancel),
-                              (step, look, cancel) => SmartTargets.Confirm(handle, process, step, look, cancel)))
+                              (step, look, cancel) => SmartTargets.Confirm(handle, process, step, look, cancel), values))
             {
                 runWindow = null;
                 return;
             }
+            RunLog log = host?.OpenLog();
+            log?.Write("run.start", "kind", "macro", "name", DisplayName, "file", path, "app", macro.ExeName, "repeat", macro.Repeat,
+                       "steps", macro.Steps.Count, "limitMinutes", macro.LimitMinutes);
+            System.Threading.Volatile.Write(ref runLog, log);
+            runClock = Stopwatch.StartNew();
             RefreshAll();
         }
 
@@ -1549,6 +1575,9 @@ namespace VClicker
         private void OnPlayerStopped(MacroStopReason reason)
         {
             if (player.Phase != MacroPhase.Idle) return; // a new run already started
+            System.Threading.Volatile.Read(ref runLog)?.Write("run.stop", "kind", "macro", "reason", reason.ToString(), "iteration", player.Iteration,
+                                             "step", player.StepIndex + 1, "elapsedMs", runClock?.ElapsedMilliseconds ?? 0L);
+            System.Threading.Volatile.Write(ref runLog, null);
             string name = runWindow?.DisplayName ?? AppName;
             runWindow = null;
             shownStep = -1;
@@ -1577,6 +1606,44 @@ namespace VClicker
                 list.SelectedIndex = at;
             BringBack();
             RefreshAll();
+            host?.MacroRunEnded(reason);
+        }
+
+        /// <summary>Developer Mode: the command line that runs this macro, on the clipboard.</summary>
+        private void CopyCommand()
+        {
+            CommitDetail();
+            if (path == null || dirty)
+            {
+                Refuse(Loc.T("mmsg.saveFirst"));
+                return;
+            }
+            Dictionary<string, string> defaults = MacroVariables.Defaults(macro);
+            string text = CommandLineFor(Application.ExecutablePath, path, MacroVariables.Used(macro).Where(n => !defaults.ContainsKey(n)));
+            try
+            {
+                Clipboard.SetText(text);
+                SetMessage(Loc.T("mmsg.commandCopied"), Theme.Success);
+            }
+            catch (System.Runtime.InteropServices.ExternalException)
+            {
+                SetMessage(text, Theme.Dim); // the clipboard is busy: show it to copy by hand
+            }
+        }
+
+        /// <summary>
+        /// A PowerShell line that runs the macro, waits for it (V-Clicker is a window app) and shows the exit code.
+        /// Each argument is single-quoted ('' inside); the macro path is also double-quoted, as Start-Process joins them.
+        /// </summary>
+        internal static string CommandLineFor(string exe, string file, IEnumerable<string> variables)
+        {
+            // PowerShell closes a single-quoted string at ' and at the typographic ‘ ’ ‚ ‛ too: double every one of them.
+            string Single(string text) =>
+                "'" + System.Text.RegularExpressions.Regex.Replace(text, "['‘’‚‛]", m => m.Value + m.Value) + "'";
+            IEnumerable<string> args = new[] { "--macro", "\"" + file + "\"" }
+                .Concat(variables.SelectMany(n => new[] { "--var", n + "=" }))
+                .Concat(new[] { "--exit-when-done" });
+            return "$p = Start-Process -Wait -PassThru -FilePath " + Single(exe) + " -ArgumentList " + string.Join(",", args.Select(Single)) + "; $p.ExitCode";
         }
 
         /// <summary>Why a click was not made, from the last look for its target.</summary>
@@ -1722,6 +1789,7 @@ namespace VClicker
         /// <summary>Every 100 ms: countdowns, the status line, the running step, beeps, the end of an F7 read.</summary>
         private void Tick()
         {
+            if (bCommand.Visible != settings.DeveloperMode) bCommand.Visible = settings.DeveloperMode;
             if (analyzing != null && analyzing.IsCompleted && !conditionDialogOpen) FinishAnalysis();
             if (recordStartAt != 0)
             {
@@ -1877,6 +1945,15 @@ namespace VClicker
                 }
             }
             else StopAll(MacroStopReason.Manual);
+            // The player's stop is never handled once the window is gone: log it and tell the main window now.
+            RunLog log = System.Threading.Volatile.Read(ref runLog);
+            if (log != null)
+            {
+                log.Write("run.stop", "kind", "macro", "reason", MacroStopReason.Manual.ToString(), "iteration", player.Iteration,
+                          "step", player.StepIndex + 1, "elapsedMs", runClock?.ElapsedMilliseconds ?? 0L);
+                System.Threading.Volatile.Write(ref runLog, null);
+                host?.MacroRunEnded(MacroStopReason.Manual);
+            }
             base.OnFormClosing(e);
         }
 

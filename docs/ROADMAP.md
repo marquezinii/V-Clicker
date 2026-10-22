@@ -60,7 +60,11 @@ outra janela do mesmo processo ou executável e continuar nela.
 - **Profiles, depois da V2:** macro preferida por aplicativo no Studio e atalho global para executar uma macro.
 - **Interface adaptativa:** implementada ([design](superpowers/specs/2026-10-21-adaptive-interface-design.md)):
   modo simples (velocidade, botão do mouse, atalhos) e avançado; instalações novas começam no simples.
-- **Próximos:** Developer Mode, AI Macro Builder (exige decidir sobre a promessa de "sem rede").
+- **Developer Mode:** implementado ([design](superpowers/specs/2026-10-21-developer-mode-design.md),
+  [referência](developer.md)): linha de comando com códigos de saída, variáveis, logs JSON Lines, formatos documentados.
+- **Developer Mode, depois da V1:** mandar comandos para um V-Clicker já aberto; variáveis em outros passos (atalhos,
+  esperas); um modo de teste que só registra, sem enviar nada.
+- **Próximo:** AI Macro Builder (exige decidir sobre a promessa de "sem rede").
 
 ## Fase de produtividade
 

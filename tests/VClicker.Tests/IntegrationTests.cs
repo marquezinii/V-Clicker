@@ -720,6 +720,33 @@ namespace VClicker.Tests
                             Spin(500);
                             Equal("OiOiOiOiOi", box.Text, "and nothing was typed");
                             Equal(5, clicks, "nor clicked (one click in each of the two runs)");
+
+                            // Developer Mode: a {{variable}} from the command line is typed, and the run is logged without the text.
+                            studio.Current.Steps.RemoveAt(studio.Current.Steps.Count - 1); // the Delete key
+                            studio.Current.Steps.Find(s => s.Kind == StepKind.Type).Text = "{{who}}{{iteration}}";
+                            host.Settings.DeveloperMode = true;
+                            studio.CommandValues = new Dictionary<string, string> { ["who"] = "Al" };
+                            RunToEnd("the run with a variable");
+                            Equal("OiOiOiOiOiAl1", box.Text, "the value and the repetition were typed");
+                            Equal(6, clicks, "and the button clicked");
+                            // run.stop is written when the Studio handles the stop, just after Busy turns false.
+                            string logged = string.Empty;
+                            for (Stopwatch w = Stopwatch.StartNew(); !logged.Contains("run.stop") && w.ElapsedMilliseconds < 3000; Spin(50))
+                                logged = File.ReadAllText(RunLog.DailyPath(studioIni));
+                            True(logged.Contains("\"kind\":\"macro\"") && logged.Contains("\"reason\":\"Completed\"") && logged.Contains("\"kind\":\"Type\""), logged);
+                            True(!logged.Contains("Al1"), "never what was typed");
+
+                            // Developer Mode: a command's run cut short by closing the window is exit code 1, and the log says so.
+                            var waiting = new Macro { Name = "Wait", ExeName = studio.Current.ExeName };
+                            waiting.Steps.Add(new MacroStep { Kind = StepKind.Wait, DurationMs = 60000 });
+                            string waitFile = Path.Combine(MacroFile.Folder(studioIni), "Wait.vcmacro"), commandLog = Path.Combine(Path.GetDirectoryName(studioIni), "cmd.jsonl");
+                            MacroFile.Save(waiting, waitFile);
+                            Equal(-1, host.RunCommand(CommandLine.Parse(new[] { "--macro", waitFile, "--log", commandLog })), "the command's run started");
+                            True(studio.Busy, "running");
+                            host.Close();
+                            Equal(ExitCodes.Stopped, host.ExitCode, "closed before the end: stopped, not done");
+                            string commandLogged = File.ReadAllText(commandLog);
+                            True(commandLogged.Contains("\"event\":\"run.stop\"") && commandLogged.Contains("\"reason\":\"Manual\""), commandLogged);
                             studio.Dispose(); // unsaved on purpose: closing would ask to save
                         }
                     }

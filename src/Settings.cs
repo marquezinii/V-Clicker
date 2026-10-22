@@ -60,6 +60,8 @@ namespace VClicker
         public string Language = "auto";
         /// <summary>false = the simple window (speed, button, hotkeys). A new install starts simple; see <see cref="Load"/>.</summary>
         public bool Advanced = true;
+        /// <summary>Developer Mode: every run is logged (Logs-clicker-YYYY-MM-DD.jsonl) and the Studio can copy a command line.</summary>
+        public bool DeveloperMode;
 
         public const int MaxApprovals = 200;
         /// <summary>
@@ -206,6 +208,7 @@ namespace VClicker
             yield return "MinimizeToTray=" + MinimizeToTray;
             yield return "Language=" + Language;
             yield return "Advanced=" + Advanced;
+            yield return "DeveloperMode=" + DeveloperMode;
             yield return "ApprovedMacros=" + string.Join(",", ApprovedMacros);
         }
 
@@ -253,6 +256,7 @@ namespace VClicker
             MinimizeToTray = Bool(pairs, "MinimizeToTray", MinimizeToTray);
             if (pairs.TryGetValue("Language", out string language)) Language = language.ToLowerInvariant();
             Advanced = Bool(pairs, "Advanced", Advanced);
+            DeveloperMode = Bool(pairs, "DeveloperMode", DeveloperMode);
             if (pairs.TryGetValue("ApprovedMacros", out string approved))
                 ApprovedMacros = approved.Split(',').Select(k => k.Trim()).Where(k => k.Length > 0).ToList();
         }
