@@ -379,6 +379,20 @@ namespace VClicker
         public static string Folder(string settingsPath) =>
             Path.Combine(Path.GetDirectoryName(Path.GetFullPath(settingsPath)) ?? ".", "Macros");
 
+        /// <summary>Where the macro called <paramref name="name"/> is saved in <paramref name="folder"/>.</summary>
+        public static string PathFor(string folder, string name) => Path.Combine(folder, SafeFileName(name) + Extension);
+
+        /// <summary>The macro files in <paramref name="folder"/>; none when it is missing or unreadable.</summary>
+        public static string[] SavedFiles(string folder)
+        {
+            try { return Directory.Exists(folder) ? Directory.GetFiles(folder, "*" + Extension) : new string[0]; }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException) { return new string[0]; }
+        }
+
+        /// <summary>The two paths name the same file.</summary>
+        public static bool SamePath(string a, string b) =>
+            string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+
         public static string SafeFileName(string name)
         {
             var clean = new StringBuilder();
@@ -774,7 +788,7 @@ namespace VClicker
             return quoted.Append('"').ToString();
         }
 
-        private static string OneLine(string text) => (text ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
+        internal static string OneLine(string text) => (text ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
 
         private static string Btn(ClickButton button) =>
             button == ClickButton.Right ? "right" : button == ClickButton.Middle ? "middle" : "left";

@@ -1244,7 +1244,7 @@ namespace VClicker
         private string MacroPath(string macro)
         {
             if (File.Exists(macro)) return Path.GetFullPath(macro);
-            string saved = Path.Combine(MacroFile.Folder(settingsPath), MacroFile.SafeFileName(macro) + MacroFile.Extension);
+            string saved = MacroFile.PathFor(MacroFile.Folder(settingsPath), macro);
             return File.Exists(saved) ? saved : null;
         }
 
@@ -1802,7 +1802,7 @@ namespace VClicker
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            Native.StyleTitleBar(Handle, ColorRef(Theme.Bg), ColorRef(Theme.Text), ColorRef(Theme.Border));
+            Native.StyleTitleBar(Handle);
             Native.SetWindowTheme(Handle, "DarkMode_Explorer", null); // dark scroll bars on short screens
             hotkeys = new HotkeyRegistry(Handle);
             RegisterAllHotkeys();
@@ -1867,8 +1867,6 @@ namespace VClicker
         }
 
         // ------------------------------------------------------------------ misc
-
-        internal static int ColorRef(Color color) => color.R | (color.G << 8) | (color.B << 16);
 
         internal static bool IsElevated()
         {

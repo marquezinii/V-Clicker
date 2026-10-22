@@ -124,7 +124,7 @@ namespace VClicker
             var text = new StringBuilder();
             text.Append(Magic).Append('\n');
             text.Append("exe=").Append(profile.ExeName.Trim()).Append('\n');
-            text.Append("name=").Append(OneLine(profile.Name)).Append('\n');
+            text.Append("name=").Append(MacroFile.OneLine(profile.Name)).Append('\n');
             text.Append("used=").Append(profile.UsedUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture)).Append('\n');
             foreach (string line in profile.Settings.Serialize().Where(IsProfileLine)) text.Append(line).Append('\n');
             foreach (Macro macro in macros) text.Append(MacroMark).Append('\n').Append(MacroFile.Write(macro));
@@ -187,10 +187,7 @@ namespace VClicker
         public static List<Macro> AllMacros(string macroFolder)
         {
             var found = new List<Macro>();
-            string[] files;
-            try { files = Directory.Exists(macroFolder) ? Directory.GetFiles(macroFolder, "*" + MacroFile.Extension) : new string[0]; }
-            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException) { return found; }
-            foreach (string file in files.OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            foreach (string file in MacroFile.SavedFiles(macroFolder).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
             {
                 try
                 {
@@ -246,7 +243,5 @@ namespace VClicker
             string button = settings.Button == ClickButton.Right ? "button.right" : settings.Button == ClickButton.Middle ? "button.middle" : "button.left";
             return speed + " CPS · " + MacroStep.Lower(Loc.T(button));
         }
-
-        private static string OneLine(string text) => (text ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
     }
 }

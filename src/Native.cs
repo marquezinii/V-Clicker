@@ -133,16 +133,17 @@ namespace VClicker
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
 
-        /// <summary>
-        /// Dark title bar on Windows 10/11, plus exact caption/text/border colors on Windows 11.
-        /// Every call is best-effort: older builds simply ignore the attributes they do not know.
-        /// </summary>
         /// <summary>"DarkMode_Explorer" gives a window dark scroll bars (Windows 10 1809+; elsewhere it changes nothing).</summary>
         [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
         internal static extern int SetWindowTheme(IntPtr window, string app, string idList);
 
-        internal static void StyleTitleBar(IntPtr window, int caption, int text, int border)
+        /// <summary>
+        /// Dark title bar on Windows 10/11, plus the theme's caption/text/border colors on Windows 11.
+        /// Every call is best-effort: older builds simply ignore the attributes they do not know.
+        /// </summary>
+        internal static void StyleTitleBar(IntPtr window)
         {
+            int caption = ColorRef(Theme.Bg), text = ColorRef(Theme.Text), border = ColorRef(Theme.Border);
             int on = 1;
             // 20 = DWMWA_USE_IMMERSIVE_DARK_MODE (Windows 10 20H1+); 19 = the pre-release value used by 1903/1909.
             if (DwmSetWindowAttribute(window, 20, ref on, sizeof(int)) != 0)
@@ -152,5 +153,7 @@ namespace VClicker
             DwmSetWindowAttribute(window, 36, ref text, sizeof(int));
             DwmSetWindowAttribute(window, 34, ref border, sizeof(int));
         }
+
+        private static int ColorRef(System.Drawing.Color color) => color.R | (color.G << 8) | (color.B << 16);
     }
 }

@@ -106,7 +106,7 @@ namespace VClicker
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            Native.StyleTitleBar(Handle, MainForm.ColorRef(Theme.Bg), MainForm.ColorRef(Theme.Text), MainForm.ColorRef(Theme.Border));
+            Native.StyleTitleBar(Handle);
             Native.SetWindowTheme(list.Handle, "DarkMode_Explorer", null);
         }
 
