@@ -51,7 +51,7 @@ cada campo como faz com um arquivo `.vcmacro`; nada da resposta vira passo sem p
 
 ## Modelo e API
 
-- Claude Opus 5 (`claude-opus-5`) pela Messages API, com saída estruturada (`output_config.format` com JSON Schema),
+- Claude Sonnet 5.5 (`claude-sonnet-5-5`) pela Messages API, com saída estruturada (`output_config.format` com JSON Schema),
   esforço `low` (tarefa curta e bem definida) e `fallbacks: "default"` para recusas.
 - Chamada HTTP direta com `HttpClient` do .NET Framework, sem o SDK (**decisão**: o V-Clicker é um `.exe` único sem
   dependências de terceiros; o SDK traria DLLs junto). O formato do pedido segue a documentação da API.

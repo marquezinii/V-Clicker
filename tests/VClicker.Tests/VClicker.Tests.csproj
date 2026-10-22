@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net48</TargetFramework>
-    <LangVersion>12.0</LangVersion>
+    <LangVersion>14.0</LangVersion>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>V-Clicker.Tests</AssemblyName>
     <RootNamespace>VClicker.Tests</RootNamespace>

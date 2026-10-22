@@ -36,7 +36,7 @@ namespace VClicker
     /// </summary>
     internal static class MacroAi
     {
-        public const string Model = "claude-opus-5";
+        public const string Model = "claude-sonnet-5-5";
         public const string Endpoint = "https://api.anthropic.com/v1/messages";
         public const int MaxSteps = 200;
         private const int MaxText = 2000;

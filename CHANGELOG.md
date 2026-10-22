@@ -27,7 +27,7 @@ All notable changes to this project are documented here. The format follows
   version number out. The Pix QR code is a static PNG made by `assets/pix/make-pix-qr.py` (BR Code with the key, checked by
   decoding it again) and embedded in the .exe, so the app has no QR encoder. README "Support" sections added.
 - **AI Macro Builder** (see `docs/superpowers/specs/2026-10-21-ai-macro-builder-design.md`): *Build with AI* in the
-  Macro Studio. Choose the app, describe the task, and Claude (`claude-opus-5`, Messages API over HTTPS with a JSON
+  Macro Studio. Choose the app, describe the task, and Claude (`claude-sonnet-5-5`, Messages API over HTTPS with a JSON
   Schema-constrained reply) drafts a macro that opens unsaved with a note; nothing runs. Proposed clicks are stored as
   `click <button> pending` and are never clicked until a point is captured (F7) or typed, or a smart target is set:
   Run refuses them, the player stops before them and the simulation shows them without a place. Only the description
