@@ -1650,17 +1650,20 @@ namespace VClicker
         /// </summary>
         internal void FitToScreen(Rectangle area)
         {
-            if (Right > area.Right) Left = Math.Max(area.Left, area.Right - Width); // the advanced level widens it
             if (Height <= area.Height)
             {
                 if (Bottom > area.Bottom || Top < area.Top) Top = Math.Max(area.Top, area.Bottom - Height);
-                return;
             }
-            Size full = Size; // read before AutoSize is switched off: the form falls back to its default size
-            AutoSize = false;
-            AutoScroll = true;
-            Size = new Size(full.Width + SystemInformation.VerticalScrollBarWidth, area.Height);
-            Top = area.Top;
+            else
+            {
+                Size full = Size; // read before AutoSize is switched off: the form falls back to its default size
+                AutoSize = false;
+                AutoScroll = true;
+                Size = new Size(full.Width + SystemInformation.VerticalScrollBarWidth, area.Height);
+                Top = area.Top;
+            }
+            // Last, with the scroll bar counted: the advanced level widens the window.
+            if (Right > area.Right) Left = Math.Max(area.Left, area.Right - Width);
         }
 
         protected override void OnHandleCreated(EventArgs e)

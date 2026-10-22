@@ -99,7 +99,7 @@ src/             the app (WinForms, .NET Framework 4.8, no third-party dependenc
   Settings.cs      .ini settings with validation and a safe fallback
   MainForm.cs      main window;  Controls.cs / Theme.cs / Icons.cs  keys, LEDs, display and drawn icons (DESIGN.md)
   Loc.cs           Portuguese and English strings
-tests/           dependency-free test runner (134 unit tests + 8 integration tests)
+tests/           dependency-free test runner (135 unit tests + 8 integration tests)
 assets/          app icon and brand identity (assets/brand: icon, logos and brand art)
 docs/            screenshots
 ```
