@@ -146,6 +146,25 @@ namespace VClicker
         }
 
         /// <summary>
+        /// Where a mouse step acts, shared by a run and the simulation: its window (the bound one or the step's dialog),
+        /// that window's client area and the step's points on the screen. AnchorMissing, PointOutside or Ok; nothing
+        /// about focus or what covers the point.
+        /// </summary>
+        public static MacroCheck Resolve(IntPtr bound, MacroStep step, out IntPtr anchor, out Rectangle client, out Point screen, out Point end)
+        {
+            client = Rectangle.Empty;
+            screen = end = Point.Empty;
+            anchor = FindAnchor(bound, step.Window);
+            if (anchor == IntPtr.Zero) return MacroCheck.AnchorMissing;
+            client = WindowLock.ClientArea(anchor);
+            screen = new Point(client.X + step.At.X, client.Y + step.At.Y);
+            end = new Point(client.X + step.To.X, client.Y + step.To.Y);
+            // A drag must also be released inside the same window: never drop something on another app.
+            bool inside = client.Contains(screen) && (step.Kind != StepKind.Drag || client.Contains(end));
+            return inside ? MacroCheck.Ok : MacroCheck.PointOutside;
+        }
+
+        /// <summary>
         /// The check run right before every input of a macro (on the player thread). A handle whose process changed
         /// counts as closed: Windows reuses handles of destroyed windows.
         /// </summary>
@@ -159,22 +178,9 @@ namespace VClicker
             }
             if (step.IsMouse)
             {
-                IntPtr anchor = FindAnchor(bound, step.Window);
-                if (anchor == IntPtr.Zero)
-                {
-                    result.Status = MacroCheck.AnchorMissing;
-                    return result;
-                }
-                Rectangle client = WindowLock.ClientArea(anchor);
-                var screen = new Point(client.X + step.At.X, client.Y + step.At.Y);
-                // A drag must also be released inside the same window: never drop something on another app.
-                var end = new Point(client.X + step.To.X, client.Y + step.To.Y);
+                result.Status = Resolve(bound, step, out IntPtr anchor, out Rectangle client, out Point screen, out Point end);
+                if (result.Status != MacroCheck.Ok) return result;
                 bool drag = step.Kind == StepKind.Drag;
-                if (!client.Contains(screen) || (drag && !client.Contains(end)))
-                {
-                    result.Status = MacroCheck.PointOutside;
-                    return result;
-                }
                 if (!Owns(bound, WindowLock.Foreground()))
                 {
                     result.Status = MacroCheck.NotFocused;

@@ -106,13 +106,18 @@ namespace VClicker
         /// </summary>
         private static ConditionRead ReadElement(IntPtr anchor, uint process, MacroStep step, CancellationToken cancel)
         {
-            TargetLook found = WithTimeout(() => SmartTargets.FindElement(anchor, step.ControlType, step.Text, step.AutomationId),
-                                           null, SmartTargets.SearchTimeoutMs, cancel);
-            if (found == null || found.Status != TargetStatus.Found) return ConditionRead.NotYet;
+            TargetLook found = SmartTargets.Look(anchor, process, ElementTarget(step), null, Rectangle.Empty, cancel);
+            if (found.Read != ConditionRead.Met) return ConditionRead.NotYet;
             var area = new Rectangle(found.Screen.X - Half, found.Screen.Y - Half, 2 * Half + 1, 2 * Half + 1);
             if (!WindowLock.ClientArea(anchor).Contains(area)) return ConditionRead.NotYet;
             return Cover(anchor, process, area);
         }
+
+        /// <summary>An element condition as the target the search looks for.</summary>
+        internal static SmartTarget ElementTarget(MacroStep step) => new SmartTarget
+        {
+            Kind = TargetKind.Element, ControlType = step.ControlType, Name = step.Text, AutomationId = step.AutomationId
+        };
 
         /// <summary>
         /// Met when the window under the area's centre and corners is <paramref name="anchor"/>. Something of the
@@ -150,20 +155,39 @@ namespace VClicker
             if (dc == IntPtr.Zero) return null;
             try
             {
-                int r = 0, g = 0, b = 0;
-                for (int y = area.Top; y < area.Bottom; y++)
-                    for (int x = area.Left; x < area.Right; x++)
-                    {
-                        uint pixel = GetPixel(dc, x, y);
-                        if (pixel == 0xFFFFFFFF) return null; // CLR_INVALID: outside the desktop or not readable
-                        r += (int)(pixel & 0xFF);
-                        g += (int)((pixel >> 8) & 0xFF);
-                        b += (int)((pixel >> 16) & 0xFF);
-                    }
-                int n = area.Width * area.Height;
-                return ((r / n) << 16) | ((g / n) << 8) | (b / n);
+                return Average(area, (x, y) =>
+                {
+                    uint pixel = GetPixel(dc, x, y); // 0x00BBGGRR
+                    if (pixel == 0xFFFFFFFF) return null; // CLR_INVALID: outside the desktop or not readable
+                    return (int)(((pixel & 0xFF) << 16) | (pixel & 0xFF00) | ((pixel >> 16) & 0xFF));
+                });
             }
             finally { ReleaseDC(IntPtr.Zero, dc); }
+        }
+
+        /// <summary>The same 5x5 average in a capture of the client area (the simulation); null when it leaves the capture.</summary>
+        internal static int? AverageColor(Bitmap shot, Point at)
+        {
+            var area = new Rectangle(at.X - Half, at.Y - Half, 2 * Half + 1, 2 * Half + 1);
+            if (!new Rectangle(Point.Empty, shot.Size).Contains(area)) return null;
+            return Average(area, (x, y) => shot.GetPixel(x, y).ToArgb() & 0xFFFFFF);
+        }
+
+        /// <param name="rgbAt">One pixel as 0xRRGGBB; null = not readable.</param>
+        private static int? Average(Rectangle area, Func<int, int, int?> rgbAt)
+        {
+            int r = 0, g = 0, b = 0;
+            for (int y = area.Top; y < area.Bottom; y++)
+                for (int x = area.Left; x < area.Right; x++)
+                {
+                    int? rgb = rgbAt(x, y);
+                    if (rgb == null) return null;
+                    r += (rgb.Value >> 16) & 0xFF;
+                    g += (rgb.Value >> 8) & 0xFF;
+                    b += rgb.Value & 0xFF;
+                }
+            int n = area.Width * area.Height;
+            return ((r / n) << 16) | ((g / n) << 8) | (b / n);
         }
 
         /// <summary>One kind of line break, so a multi-line name survives the file (which keeps only \n).</summary>

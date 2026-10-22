@@ -104,20 +104,25 @@ namespace VClicker
             if (!MacroTarget.Owns(bound, WindowLock.Foreground())) { look.Read = ConditionRead.Away; return look; }
             IntPtr anchor = MacroTarget.FindAnchor(bound, step.Window);
             if (anchor == IntPtr.Zero) return look; // the step's dialog is not open (yet)
-            SmartTarget target = step.Target;
+            return Look(anchor, process, step.Target, null, Rectangle.Empty, cancel);
+        }
+
+        /// <summary>
+        /// The search itself, shared by a run and the simulation (no focus check): the element in the window's UI
+        /// Automation tree, or the image in <paramref name="shot"/>, a capture of the client area <paramref name="client"/>
+        /// (null: a screenshot of the window's client area now, as a run does).
+        /// </summary>
+        internal static TargetLook Look(IntPtr anchor, uint process, SmartTarget target, Bitmap shot, Rectangle client, CancellationToken cancel)
+        {
             TargetLook found = MacroConditions.WithTimeout(
                 () => target.Kind == TargetKind.Element
                     ? FindElement(anchor, target.ControlType, target.Name, target.AutomationId)
-                    : FindImage(anchor, process, target),
+                    : shot != null ? FindImage(shot, client, target) : FindImage(anchor, process, target),
                 null, SearchTimeoutMs, cancel);
-            if (found == null)
-            {
-                look.Status = TargetStatus.Inconclusive;
-                return look;
-            }
+            if (found == null) return new TargetLook { Status = TargetStatus.Inconclusive };
             if (found.Status == TargetStatus.Found)
             {
-                if (WindowLock.ClientArea(anchor).Contains(found.Screen)) found.Read = ConditionRead.Met;
+                if ((shot != null ? client : WindowLock.ClientArea(anchor)).Contains(found.Screen)) found.Read = ConditionRead.Met;
                 else found.Status = TargetStatus.Offscreen; // visible, but not where the window shows it
             }
             return found;
@@ -274,13 +279,23 @@ namespace VClicker
         /// <summary>The image in a screenshot of the window's client area. Run it through <see cref="MacroConditions.WithTimeout"/>.</summary>
         private static TargetLook FindImage(IntPtr anchor, uint process, SmartTarget target)
         {
-            var look = new TargetLook();
             Rectangle client = WindowLock.ClientArea(anchor);
             using (Bitmap image = target.Decode())
+                if (image == null || client.Width < image.Width || client.Height < image.Height) return new TargetLook();
+            TargetLook look;
+            using (Bitmap shot = Shoot(client)) look = FindImage(shot, client, target);
+            if (look.Status == TargetStatus.NotFound && ForeignCover(anchor, process, client)) look.Read = ConditionRead.Covered; // maybe hidden under it: pause
+            return look;
+        }
+
+        /// <summary>The image in <paramref name="shot"/>, a capture of the client area <paramref name="client"/> (screen coordinates).</summary>
+        private static TargetLook FindImage(Bitmap shot, Rectangle client, SmartTarget target)
+        {
+            var look = new TargetLook();
+            using (Bitmap image = target.Decode())
             {
-                if (image == null || client.Width < image.Width || client.Height < image.Height) return look;
-                ImageMatch match;
-                using (Bitmap shot = Shoot(client)) match = ImageTarget.Search(shot, image);
+                if (image == null || shot.Width < image.Width || shot.Height < image.Height) return look;
+                ImageMatch match = ImageTarget.Search(shot, image);
                 look.Count = match.Count;
                 if (match.Found.HasValue)
                 {
@@ -290,7 +305,6 @@ namespace VClicker
                     look.Screen = new Point(look.Bounds.X + found.Width / 2, look.Bounds.Y + found.Height / 2);
                 }
                 else if (match.Count > 1) look.Status = TargetStatus.Ambiguous;
-                else if (ForeignCover(anchor, process, client)) look.Read = ConditionRead.Covered; // maybe hidden under it: pause
             }
             return look;
         }

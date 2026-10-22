@@ -27,6 +27,8 @@ namespace VClicker.Tests
             if (Array.IndexOf(options, "studio") >= 0) return TakeStudio(output, language, ini, Array.IndexOf(options, "smart") >= 0);
             if (Array.IndexOf(options, "target") >= 0) return TakeTarget(output, language, Array.IndexOf(options, "look") >= 0);
             if (Array.IndexOf(options, "condition") >= 0) return TakeCondition(output, language);
+            if (Array.IndexOf(options, "simulation") >= 0) return TakeSimulation(output, language);
+            if (Array.IndexOf(options, "review") >= 0) return TakeReview(output, language);
             try
             {
                 new ClickSettings { Language = language, StartDelaySeconds = 0, Sounds = false, IntervalMs = 100 }.Save(ini);
@@ -118,6 +120,94 @@ namespace VClicker.Tests
                 At = new Point(640, 520), ElementName = language == "en" ? "Download PDF" : "Baixar PDF", ControlType = "Button", Rgb = 0x3A6BD1
             };
             using (var dialog = new MacroStudio.ConditionDialog(probe, 30000))
+            {
+                dialog.StartPosition = FormStartPosition.Manual;
+                dialog.Location = new Point(60, 40);
+                dialog.Show();
+                Pump(500);
+                Rectangle bounds = dialog.Bounds;
+                using (var picture = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb))
+                {
+                    dialog.DrawToBitmap(picture, new Rectangle(Point.Empty, bounds.Size));
+                    picture.Save(output, ImageFormat.Png);
+                }
+            }
+            return 0;
+        }
+
+        /// <summary>SafeClick's simulation on a fabricated look at a reports page (<c>--screenshot out.png pt simulation</c>).</summary>
+        private static int TakeSimulation(string output, string language)
+        {
+            Loc.SetLanguage(language);
+            bool en = language == "en";
+            var page = new Bitmap(800, 480, PixelFormat.Format32bppArgb);
+            using (Graphics g = Graphics.FromImage(page))
+            using (var font = new Font("Segoe UI", 11f))
+            using (var bold = new Font("Segoe UI Semibold", 14f))
+            using (var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+            {
+                g.Clear(Color.FromArgb(240, 242, 245));
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+                g.FillRectangle(Brushes.White, 40, 40, 720, 400);
+                g.DrawString(en ? "Monthly report" : "Relatório mensal", bold, Brushes.Black, 70, 70);
+                g.DrawRectangle(Pens.Silver, 70, 130, 660, 44);
+                g.DrawString(en ? "Record #001" : "Registro #001", font, Brushes.Gray, 82, 142);
+                using (var fill = new SolidBrush(Color.FromArgb(230, 234, 240))) g.FillRectangle(fill, 70, 360, 170, 44);
+                g.DrawString(en ? "Generate report" : "Gerar relatório", font, Brushes.Black, new RectangleF(70, 360, 170, 44), format);
+                using (var fill = new SolidBrush(Color.FromArgb(47, 111, 214))) g.FillRectangle(fill, 590, 360, 140, 44);
+                g.DrawString(en ? "Download PDF" : "Baixar PDF", font, Brushes.White, new RectangleF(590, 360, 140, 44), format);
+            }
+            string pdf = en ? "Download PDF" : "Baixar PDF";
+            var macro = new Macro { Name = en ? "Friday reports" : "Relatórios de sexta", ExeName = "chrome.exe", Repeat = 60 };
+            macro.Steps.Add(new MacroStep { Kind = StepKind.Click, At = new Point(400, 152) });
+            macro.Steps.Add(new MacroStep { Kind = StepKind.Type, Text = en ? "Record #001" : "Registro #001" });
+            macro.Steps.Add(new MacroStep { Kind = StepKind.Click, At = new Point(155, 382) });
+            macro.Steps.Add(new MacroStep { Kind = StepKind.WaitFor, Condition = ConditionKind.Element, ControlType = "Button", Text = pdf, DurationMs = 30000 });
+            macro.Steps.Add(new MacroStep { Kind = StepKind.Click, Target = new SmartTarget { Kind = TargetKind.Element, ControlType = "Button", Name = pdf } });
+            macro.Steps.Add(new MacroStep { Kind = StepKind.Shortcut, Key = Keys.Delete | Keys.Shift });
+            macro.Steps.Add(new MacroStep { Kind = StepKind.Shortcut, Key = Keys.F4 | Keys.Alt });
+            var window = new IntPtr(1);
+            Func<System.Threading.CancellationToken, MacroPreviewResult> evaluate = cancel =>
+            {
+                var result = new MacroPreviewResult { WindowFound = true, Impactful = SafeClick.Impactful(macro) };
+                result.Shots[window] = new WindowShot((Bitmap)page.Clone(), new Rectangle(0, 0, 800, 480), ShotProblem.None);
+                var pdfBounds = new Rectangle(590, 360, 140, 44);
+                result.Steps.Add(new StepPreview { Index = 0, Kind = StepKind.Click, State = PreviewState.InCapture, Window = window, At = new Point(400, 152) });
+                result.Steps.Add(new StepPreview { Index = 1, Kind = StepKind.Type, State = PreviewState.NoPosition });
+                result.Steps.Add(new StepPreview { Index = 2, Kind = StepKind.Click, State = PreviewState.InCapture, Window = window, At = new Point(155, 382) });
+                result.Steps.Add(new StepPreview { Index = 3, Kind = StepKind.WaitFor, State = PreviewState.Verified, Window = window, At = new Point(660, 382), Bounds = pdfBounds, Met = true });
+                result.Steps.Add(new StepPreview { Index = 4, Kind = StepKind.Click, State = PreviewState.Verified, Window = window, At = new Point(660, 382), Bounds = pdfBounds });
+                result.Steps.Add(new StepPreview { Index = 5, Kind = StepKind.Shortcut, State = PreviewState.NoPosition });
+                result.Steps.Add(new StepPreview { Index = 6, Kind = StepKind.Shortcut, State = PreviewState.NoPosition });
+                return result;
+            };
+            using (var dialog = new SimulationDialog(macro, evaluate, 4))
+            {
+                dialog.StartPosition = FormStartPosition.Manual;
+                dialog.Location = new Point(60, 40);
+                dialog.Show();
+                Pump(800);
+                Rectangle bounds = dialog.Bounds;
+                using (var picture = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb))
+                {
+                    dialog.DrawToBitmap(picture, new Rectangle(Point.Empty, bounds.Size));
+                    picture.Save(output, ImageFormat.Png);
+                }
+            }
+            page.Dispose();
+            return 0;
+        }
+
+        /// <summary>SafeClick's safety review before a run (<c>--screenshot out.png pt review</c>).</summary>
+        private static int TakeReview(string output, string language)
+        {
+            Loc.SetLanguage(language);
+            var actions = new System.Collections.Generic.List<ImpactfulAction>
+            {
+                new ImpactfulAction { Step = 7, Key = Keys.Delete | Keys.Shift, Deletes = true },
+                new ImpactfulAction { Step = 11, Key = Keys.F4 | Keys.Alt }
+            };
+            using (var dialog = new SafetyReview(actions))
             {
                 dialog.StartPosition = FormStartPosition.Manual;
                 dialog.Location = new Point(60, 40);

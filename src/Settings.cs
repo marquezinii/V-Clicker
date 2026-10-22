@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace VClicker
@@ -57,6 +59,24 @@ namespace VClicker
         /// <summary>"auto", "pt" or "en".</summary>
         public string Language = "auto";
 
+        public const int MaxApprovals = 200;
+        /// <summary>
+        /// Macros whose safety review the user accepted: <see cref="SafeClick.ApprovalKey"/> (content + local copy),
+        /// oldest first. Kept here, never in the macro file a person can share.
+        /// </summary>
+        public List<string> ApprovedMacros = new List<string>();
+
+        public bool IsApproved(string key) => ApprovedMacros.Contains(key);
+
+        public void Approve(string key)
+        {
+            ApprovedMacros.Remove(key);
+            ApprovedMacros.Add(key);
+            if (ApprovedMacros.Count > MaxApprovals) ApprovedMacros.RemoveRange(0, ApprovedMacros.Count - MaxApprovals);
+        }
+
+        private static readonly Regex ApprovalPattern = new Regex("^[0-9a-f]{64}@[0-9A-Za-z-]{1,40}$");
+
         /// <summary>Clamps every value into its supported range and repairs invalid or clashing hotkeys.</summary>
         public void Validate()
         {
@@ -72,6 +92,8 @@ namespace VClicker
             LockExe = IsExeFileName(LockExe) ? LockExe.Trim() : string.Empty;
             LockName = Printable(LockName, 40); // shown in the badge and the indicator: keep it short
             if (LockName.Length == 0 && LockExe.Length > 0) LockName = Path.GetFileNameWithoutExtension(LockExe);
+            ApprovedMacros = ApprovedMacros.Where(k => k != null && ApprovalPattern.IsMatch(k)).Distinct().ToList();
+            if (ApprovedMacros.Count > MaxApprovals) ApprovedMacros.RemoveRange(0, ApprovedMacros.Count - MaxApprovals);
 
             if (!ToggleKey.IsAcceptable) ToggleKey = DefaultToggle;
             if (!StopKey.IsAcceptable || StopKey.Equals(ToggleKey)) StopKey = DefaultStop;
@@ -179,6 +201,7 @@ namespace VClicker
             yield return "AlwaysOnTop=" + AlwaysOnTop;
             yield return "MinimizeToTray=" + MinimizeToTray;
             yield return "Language=" + Language;
+            yield return "ApprovedMacros=" + string.Join(",", ApprovedMacros);
         }
 
         // Always invariant: some cultures write a Unicode minus sign that the invariant parser rejects.
@@ -224,6 +247,8 @@ namespace VClicker
             AlwaysOnTop = Bool(pairs, "AlwaysOnTop", AlwaysOnTop);
             MinimizeToTray = Bool(pairs, "MinimizeToTray", MinimizeToTray);
             if (pairs.TryGetValue("Language", out string language)) Language = language.ToLowerInvariant();
+            if (pairs.TryGetValue("ApprovedMacros", out string approved))
+                ApprovedMacros = approved.Split(',').Select(k => k.Trim()).Where(k => k.Length > 0).ToList();
         }
 
         private static int Int(Dictionary<string, string> pairs, string key, int fallback) =>

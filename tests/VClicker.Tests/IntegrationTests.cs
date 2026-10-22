@@ -658,11 +658,75 @@ namespace VClicker.Tests
                             True(!studio.Busy, "the targeted run ended");
                             Equal(3, clicks, "the target was found and clicked by name");
                             Equal("OiOiOi", box.Text, "and the rest of the macro ran");
+
+                            // SafeClick: the simulation's look at the same macro sends nothing, and its points are where the run clicks.
+                            uint pid = (uint)Process.GetCurrentProcess().Id;
+                            var looking = System.Threading.Tasks.Task.Run(() =>
+                                MacroPreview.Evaluate(studio.Current, form.Handle, pid, WindowShot.Take, CancellationToken.None));
+                            while (!looking.IsCompleted) { Application.DoEvents(); Thread.Sleep(0); }
+                            using (MacroPreviewResult preview = looking.Result)
+                            {
+                                StepPreview byName = preview.Steps[first];
+                                Equal(PreviewState.Verified, byName.State, "the target found by name");
+                                Point buttonCentre = form.PointToClient(Center(button));
+                                True(Math.Abs(byName.At.Value.X - buttonCentre.X) <= 1 && Math.Abs(byName.At.Value.Y - buttonCentre.Y) <= 1,
+                                     "marked at the button: " + byName.At + " vs " + buttonCentre);
+                                int boxStep = studio.Current.Steps.FindIndex(first + 1, s => s.Kind == StepKind.Click);
+                                StepPreview fixedPoint = preview.Steps[boxStep];
+                                Equal(PreviewState.InCapture, fixedPoint.State, "a fixed point, in the still");
+                                Equal(studio.Current.Steps[boxStep].At, fixedPoint.At.Value, "client point = point in the still");
+                                WindowShot shot = preview.ShotOf(fixedPoint);
+                                True(shot.Usable, "the window was captured: " + shot.Problem);
+                                Equal(box.BackColor.ToArgb(), shot.Image.GetPixel(fixedPoint.At.Value.X, fixedPoint.At.Value.Y).ToArgb(),
+                                      "the still shows the text box under the point");
+                                // The still lines up with the screen pixel for pixel (no border offset): the form is on top here.
+                                int edge = button.Bottom, w = shot.Image.Width, h = shot.Image.Height;
+                                using (Bitmap screenNow = SmartTargets.Shoot(shot.Client))
+                                    foreach (Point p in new[] { new Point(w / 2, 6), new Point(w - 12, edge - 4), new Point(w - 12, edge + 4), new Point(w / 2, h - 10) })
+                                        Equal(screenNow.GetPixel(p.X, p.Y).ToArgb(), shot.Image.GetPixel(p.X, p.Y).ToArgb(), "pixel " + p + " of the still");
+                                Equal(PreviewState.NoPosition, preview.Steps.Last(s => s.Index > boxStep).State, "typing has no place");
+                            }
+                            Equal(3, clicks, "the simulation clicked nothing");
+                            Equal("OiOiOi", box.Text, "and typed nothing");
+
+                            // SafeClick: a Delete key asks once per version of the macro, through the Studio's own Run.
+                            int asked = 0;
+                            ReviewChoice answer = ReviewChoice.Run;
+                            studio.ReviewSafety = actions =>
+                            {
+                                asked++;
+                                Equal(studio.Current.Steps.Count - 1, actions.Single().Step, "the Delete step is listed");
+                                return answer;
+                            };
+                            studio.Current.Steps.Add(new MacroStep { Kind = StepKind.Key, Key = Keys.Delete });
+                            void RunToEnd(string what)
+                            {
+                                studio.BeginRun();
+                                Stopwatch w = Stopwatch.StartNew();
+                                while (studio.Busy && w.ElapsedMilliseconds < 30000) { Application.DoEvents(); Thread.Sleep(0); }
+                                True(!studio.Busy, what + " ended");
+                            }
+                            RunToEnd("the first run with Delete");
+                            Equal(1, asked, "asked before the first run");
+                            Equal("OiOiOiOi", box.Text, "approved: it ran");
+                            RunToEnd("the second run");
+                            Equal(1, asked, "the same version is not asked again");
+                            Equal("OiOiOiOiOi", box.Text, "and ran");
+                            studio.Current.Steps[studio.Current.Steps.Count - 1].Count = 2; // a new version
+                            answer = ReviewChoice.Cancel;
+                            studio.BeginRun();
+                            Equal(2, asked, "a changed macro is asked again");
+                            True(!studio.Busy, "cancelled: nothing runs");
+                            Spin(500);
+                            Equal("OiOiOiOiOi", box.Text, "and nothing was typed");
+                            Equal(5, clicks, "nor clicked (one click in each of the two runs)");
                             studio.Dispose(); // unsaved on purpose: closing would ask to save
                         }
                     }
                     finally
                     {
+                        // A failed check leaves the Studio open with unsaved steps: dispose it first, or closing would ask to save and wait forever.
+                        foreach (MacroStudio open in Application.OpenForms.OfType<MacroStudio>().ToList()) open.Dispose();
                         if (host != null && !host.IsDisposed) { host.Engine.Stop(); host.Close(); host.Dispose(); }
                         Directory.Delete(Path.GetDirectoryName(studioIni), true);
                     }

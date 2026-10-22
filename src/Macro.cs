@@ -216,9 +216,16 @@ namespace VClicker
         public Size ClientSize;
         /// <summary>Repetitions; 0 = until stopped.</summary>
         public int Repeat = 1;
+        public const int MaxLimitMinutes = 99 * 60 + 59;
+        /// <summary>The run stops after this many minutes, pauses included; 0 = no limit.</summary>
+        public int LimitMinutes;
         public List<MacroStep> Steps = new List<MacroStep>();
         /// <summary>Header lines this version does not know (from a newer one): written back unchanged.</summary>
         public List<string> ExtraHeader = new List<string>();
+
+        /// <summary>"1 h 30 min", "45 min", "2 h".</summary>
+        public static string LimitText(int minutes) =>
+            minutes < 60 ? minutes + " min" : minutes % 60 == 0 ? minutes / 60 + " h" : minutes / 60 + " h " + minutes % 60 + " min";
 
         public bool HasText => Steps.Any(s => s.Kind == StepKind.Type);
         public bool HasPassword => Steps.Any(s => s.Kind == StepKind.Password);
@@ -398,6 +405,8 @@ namespace VClicker
             text.Append("client=").Append(macro.ClientSize.Width.ToString(Inv)).Append('x')
                 .Append(macro.ClientSize.Height.ToString(Inv)).Append('\n');
             text.Append("repeat=").Append(macro.Repeat.ToString(Inv)).Append('\n');
+            // Only when set: a macro without a limit keeps the exact text (and safety approval) it had before limits existed.
+            if (macro.LimitMinutes > 0) text.Append("limit=").Append(macro.LimitMinutes.ToString(Inv)).Append('\n');
             foreach (string line in macro.ExtraHeader) text.Append(line).Append('\n');
             text.Append("[steps]\n");
             foreach (MacroStep step in macro.Steps) text.Append(Line(step)).Append('\n');
@@ -435,6 +444,9 @@ namespace VClicker
                         break;
                     case "repeat":
                         if (int.TryParse(value, NumberStyles.Integer, Inv, out int repeat)) macro.Repeat = Clamp(repeat, 0, 1000000);
+                        break;
+                    case "limit":
+                        if (int.TryParse(value, NumberStyles.Integer, Inv, out int limit)) macro.LimitMinutes = Clamp(limit, 0, Macro.MaxLimitMinutes);
                         break;
                     default:
                         macro.ExtraHeader.Add(line.TrimEnd());
