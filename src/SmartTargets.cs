@@ -175,13 +175,13 @@ namespace VClicker
             return look;
         }
 
+        private static Rectangle ToRectangle(System.Windows.Rect rect) =>
+            Rectangle.FromLTRB((int)Math.Round(rect.Left), (int)Math.Round(rect.Top), (int)Math.Round(rect.Right), (int)Math.Round(rect.Bottom));
+
         /// <summary>
         /// The elements of the window's UI Automation tree with this type and name (and id, when given). Not filtered
         /// by process: a browser serves its page from several; the scope is the window itself.
         /// </summary>
-        private static Rectangle ToRectangle(System.Windows.Rect rect) =>
-            Rectangle.FromLTRB((int)Math.Round(rect.Left), (int)Math.Round(rect.Top), (int)Math.Round(rect.Right), (int)Math.Round(rect.Bottom));
-
         private static List<AutomationElement> Matches(IntPtr anchor, string type, string name, string id)
         {
             var matches = new List<AutomationElement>();

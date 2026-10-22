@@ -1388,7 +1388,7 @@ namespace VClicker
         private void StartRecorder()
         {
             recordStartAt = 0;
-                        recorder = new MacroRecorder(recordWindow.Handle, Hotkeys, AcceptInjectedInput);
+            recorder = new MacroRecorder(recordWindow.Handle, Hotkeys, AcceptInjectedInput);
             try
             {
                 recorder.Start();
@@ -1472,7 +1472,7 @@ namespace VClicker
                 return;
             }
             // Windows fires V-Clicker's hotkeys for keys a macro presses too: F8 in a macro would stop it.
-                        for (int i = 0; i < macro.Steps.Count; i++)
+            for (int i = 0; i < macro.Steps.Count; i++)
             {
                 MacroStep step = macro.Steps[i];
                 if (step.Kind != StepKind.Key && step.Kind != StepKind.Shortcut) continue;
