@@ -1059,7 +1059,8 @@ namespace VClicker
             string text;
             if (CpsView)
                 text = perSecond < Interval.MinCps - 1e-9
-                    ? Loc.T("rate.belowCps")
+                    // Simple has no Interval mode to point at: say the speed as it is.
+                    ? settings.Advanced ? Loc.T("rate.belowCps") : Loc.F("rate.every", (1 / perSecond).ToString("0.#", CultureInfo.CurrentCulture))
                     : Loc.F("rate.ms", settings.IntervalMs.ToString(settings.IntervalMs >= 100 ? "0.#" : "0.##", CultureInfo.CurrentCulture));
             else
                 text = perSecond >= 1
