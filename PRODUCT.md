@@ -28,7 +28,7 @@ what Windows accepted (not what the game recognised), and stops and explains ins
 - Real precision: 1 ms to 24 h, absolute schedule, CPS and h/min/s/ms editing the same exact speed.
 - Window Lock: clicks only while the chosen app is in front; pauses and resumes on Alt+Tab.
 - Macro Studio with "wait until" conditions and Smart Target (find the button by name or appearance, never click on
-  ambiguity).
+  ambiguity), and SafeClick: see where a macro would click before running it, without sending anything.
 - One `.exe`, no installer, no telemetry, no network, open source (MIT).
 
 ## Operating Context
@@ -44,7 +44,8 @@ times, toggle/hold mode, start delay, cursor or fixed position with capture, Win
 focus loss), configurable hotkeys, always on top, tray, sounds, HUD and its corner, PT/EN, restart as admin, GitHub
 link, live stats (clicks, requested CPS, sent CPS, time), notices. Macro Studio: record, run, stop, repetitions,
 macro list (new, rename, delete, save), step list and step editor, long-pause optimizer, conditions and smart target
-dialogs, undo/redo.
+dialogs, undo/redo. SafeClick: simulate (passive, over a window capture), safety review before impactful
+shortcuts, optional duration limit per macro.
 
 Constraints: high DPI (every metric through `Theme.Dp`), keyboard and screen-reader access on custom controls,
 dark title bar via DWM, laptop-sized window (scrolls on short screens), PT and EN text lengths, tests drive the real

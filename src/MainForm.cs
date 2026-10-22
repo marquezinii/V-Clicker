@@ -836,7 +836,7 @@ namespace VClicker
             settings.HudCorner = (HudCorner)segHudCorner.SelectedIndex;
         }
 
-        private void SaveSettings()
+        internal void SaveSettings()
         {
             if (settings.Save(settingsPath) || saveWarned) return;
             saveWarned = true;

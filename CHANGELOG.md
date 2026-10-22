@@ -22,6 +22,16 @@ All notable changes to this project are documented here. The format follows
   monogram and brand art). The previous cyan/violet brand files were removed.
 
 ### Added
+- **SafeClick** (see `docs/superpowers/specs/2026-10-21-safeclick-design.md`):
+  - *Simulate* in the Macro Studio: a still of the app's window (captured without focusing it) with each step's
+    place marked, one step at a time, using the same position, target and condition code as a run. Nothing is
+    sent to the app. Results are stated as "in the capture"; a capture that fails its checks (minimized, refused,
+    or one flat colour) makes the steps that depend on it inconclusive, never confirmed.
+  - A safety review before the first run of a macro with Delete, Shift+Delete, Alt+F4, Ctrl+W or Ctrl+Shift+Esc.
+    The approval covers that content in that local file (renaming keeps it; any change, a copy or an imported file
+    asks again) and is kept in the settings file, never in the shareable macro.
+  - An optional duration limit per macro (`limit=` in the file, minutes): the run stops between inputs once it is
+    reached, pauses included, never in the middle of a drag.
 - **Smart Target** (macro clicks that find what to click): a recorded click can carry a target, recognized at F7 by
   name (UI Automation control type and name, plus the automation id only when needed to tell two apart) or by
   appearance (a 32/64/96 px region: the smallest one that is unique and clearly distinct on the screen). Before every

@@ -89,7 +89,9 @@ namespace VClicker
         /// <summary>A "wait until" condition was not met within its time limit: stopped before the next step.</summary>
         ConditionTimeout,
         /// <summary>A click's target was not found (or not with certainty) within its time limit: stopped before clicking.</summary>
-        TargetTimeout
+        TargetTimeout,
+        /// <summary>The macro's duration limit was reached (pauses included): stopped between inputs, never mid-drag.</summary>
+        TimeLimit
     }
 
     internal enum MacroPhase { Idle, Countdown, Running, Paused }
@@ -135,6 +137,13 @@ namespace VClicker
 
         /// <summary>A pause longer than this ends the run. Settable for tests.</summary>
         internal int PauseLimitMs = 5 * 60 * 1000;
+
+        /// <summary>One minute of <see cref="Macro.LimitMinutes"/>. Settable for tests.</summary>
+        internal int MinuteMs = 60 * 1000;
+        /// <summary>Stopwatch timestamp when the duration limit ends the run; 0 = no limit.</summary>
+        private long deadline;
+        /// <summary>A drag holds the button: the duration limit waits for it to be released.</summary>
+        private bool holding;
 
         public MacroPlayer(IInputSink sink)
         {
@@ -246,6 +255,8 @@ namespace VClicker
             confirm = checker;
             token = runToken;
             shift = 0;
+            deadline = 0;
+            holding = false;
             MacroStopReason reason = MacroStopReason.Completed;
             Native.timeBeginPeriod(1);
             IDisposable dpi = MacroTarget.PerMonitorDpi();
@@ -254,6 +265,7 @@ namespace VClicker
                 if (macro.HasUnknown) throw new EndRun(MacroStopReason.Unsupported);
                 if (macro.Steps.Count == 0) throw new EndRun(MacroStopReason.Completed);
                 if (token.WaitHandle.WaitOne(Math.Max(0, countdownMs))) throw new EndRun(Requested);
+                if (macro.LimitMinutes > 0) deadline = Stopwatch.GetTimestamp() + Ticks((double)macro.LimitMinutes * MinuteMs);
                 Volatile.Write(ref phase, (int)MacroPhase.Running);
                 for (int pass = 1; macro.Repeat == 0 || pass <= macro.Repeat; pass++)
                 {
@@ -290,6 +302,7 @@ namespace VClicker
             for (int i = 0; i < macro.Steps.Count; i++)
             {
                 Volatile.Write(ref stepIndex, i);
+                PastLimit();
                 MacroStep step = macro.Steps[i];
                 if (step.Kind == StepKind.Wait)
                 {
@@ -346,6 +359,7 @@ namespace VClicker
                     MacroCheckResult at = Check(step);
                     var to = new Point(at.Origin.X + step.To.X, at.Origin.Y + step.To.Y);
                     Do(sink.MoveTo(at.Screen));
+                    holding = true;
                     Button(step.Button, true);
                     for (int k = 1; k <= DragMoves; k++)
                     {
@@ -356,6 +370,7 @@ namespace VClicker
                                                  at.Screen.Y + (to.Y - at.Screen.Y) * k / DragMoves)));
                     }
                     Button(step.Button, false);
+                    holding = false;
                     break;
                 }
                 case StepKind.Type:
@@ -446,6 +461,7 @@ namespace VClicker
                     if (token.IsCancellationRequested) throw new EndRun(Requested);
                     ConditionRead result = read();
                     if (token.IsCancellationRequested) throw new EndRun(Requested); // a slow read never outlives a stop
+                    PastLimit(); // nor the duration limit: no click after a look that ended past it
                     long now = Stopwatch.GetTimestamp();
                     if (result == ConditionRead.Closed) throw new EndRun(MacroStopReason.TargetClosed);
                     if (result == ConditionRead.Away || result == ConditionRead.Covered)
@@ -472,7 +488,7 @@ namespace VClicker
                         else if (++positives >= confirmReads) return;
                     }
                     last = now;
-                    if (token.WaitHandle.WaitOne(WatchPollMs)) throw new EndRun(Requested);
+                    Idle(WatchPollMs);
                 }
             }
             finally
@@ -559,7 +575,7 @@ namespace VClicker
             {
                 while (true)
                 {
-                    if (token.WaitHandle.WaitOne(PausePollMs)) throw new EndRun(Requested);
+                    Idle(PausePollMs);
                     long now = Stopwatch.GetTimestamp();
                     if (now - pauseStart >= limit) throw new EndRun(MacroStopReason.PauseTimeout);
                     result = guard(step);
@@ -592,9 +608,25 @@ namespace VClicker
             {
                 long remaining = due + shift - Stopwatch.GetTimestamp();
                 if (remaining <= 0) return;
-                int ms = (int)Math.Min(int.MaxValue, Math.Max(1, remaining * 1000 / Stopwatch.Frequency));
-                if (token.WaitHandle.WaitOne(ms)) throw new EndRun(Requested);
+                Idle((int)Math.Min(int.MaxValue, Math.Max(1, remaining * 1000 / Stopwatch.Frequency)));
             }
+        }
+
+        /// <summary>
+        /// Waits up to <paramref name="ms"/>; ends the run when it is stopped, or once it is past its duration limit
+        /// (never while a drag holds the button).
+        /// </summary>
+        private void Idle(int ms)
+        {
+            PastLimit();
+            if (deadline != 0 && !holding)
+                ms = (int)Math.Min(ms, Math.Max(1, (deadline - Stopwatch.GetTimestamp()) * 1000 / Stopwatch.Frequency + 1));
+            if (token.WaitHandle.WaitOne(ms)) throw new EndRun(Requested);
+        }
+
+        private void PastLimit()
+        {
+            if (deadline != 0 && !holding && Stopwatch.GetTimestamp() >= deadline) throw new EndRun(MacroStopReason.TimeLimit);
         }
 
         private static long Ticks(double ms) => (long)(ms * (Stopwatch.Frequency / 1000.0));

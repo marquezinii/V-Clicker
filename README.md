@@ -25,6 +25,7 @@ Um único `.exe`, sem instalador, sem telemetria, sem rede.
 - **Macro Studio** (janela própria, botão no topo): clique em *Gravar*, escolha o aplicativo e faça a tarefa uma vez. Cada clique, tecla, texto e espera vira um passo em português (`Clicar (esquerdo) em 812, 440`, `Esperar 8 s`, `Digitar "Relatório"`), que você edita, salva e repete N vezes ou até parar. A macro só age na janela em que foi gravada (e nos diálogos dela): se outra janela vier para a frente, ela pausa; F8 para tudo na hora. Esperas longas podem ser encurtadas, sempre com a sua confirmação e com o tempo gravado guardado. Campos de senha não são gravados, e a execução para nesse ponto. Em navegadores, a troca de aba dentro da mesma janela não é detectada.
 - **Esperar até… (Conditional Click)**, no Macro Studio: transforme uma espera gravada (ou insira do zero) em "esperar até o botão *Baixar PDF* estar disponível", "até a cor deste ponto aparecer" ou "até a janela *Salvar como* abrir". A macro segue assim que a condição é confirmada (duas leituras seguidas) e para antes do passo seguinte se o tempo máximo acabar. Tempo com outra janela na frente não conta; uma leitura duvidosa nunca libera a macro. Dá para voltar à espera original. Um elemento é esperado onde quer que esteja na janela; cor é observada num ponto fixo.
 - **Alvo inteligente (Smart Target)**, no Macro Studio: um clique gravado passa a procurar *o que* clicar, em vez de *onde*. Aponte para o botão e aperte F7; o V-Clicker o reconhece **pelo nome** (acessibilidade do Windows, funciona no Chrome/Edge e na maioria dos programas) ou **pela aparência** (uma pequena região da tela, para jogos e programas sem nomes) e mostra uma prévia. Antes de cada clique, a macro procura o alvo e só clica se encontrar **exatamente um**, parado, habilitado e com ele mesmo sob o ponto do clique. Dois candidatos, alvo desativado, coberto ou não encontrado no tempo máximo (10 s por padrão): a macro para sem clicar e explica. O ponto gravado nunca é usado como plano B, mas dá para voltar para ele.
+- **SafeClick (simulação e revisão)**, no Macro Studio: *Simular* captura a janela do aplicativo (sem trazê-la para a frente) e mostra, passo a passo, onde cada clique cairia, o texto que seria digitado e os atalhos, com o resultado de cada alvo e condição **na captura**. Nada é clicado, digitado ou enviado ao aplicativo; uma captura que não dá para confiar (jogos com aceleração gráfica costumam vir em branco) aparece como inconclusiva, nunca como confirmação. Antes da primeira execução de uma macro com ações potencialmente impactantes (Delete, Shift+Delete, Alt+F4, Ctrl+W, Ctrl+Shift+Esc), aparece uma revisão de segurança; aprovada, essa versão da macro não pergunta de novo (qualquer mudança, ou uma cópia importada, pede nova revisão). Cada macro também pode ter um **limite de duração** opcional, que encerra a execução mesmo durante pausas.
 - **Variação aleatória** (±0–50 %) para cliques menos mecânicos.
 - **Botão esquerdo, do meio ou direito**, clique **simples ou duplo**.
 - **Repetir para sempre ou N vezes** (até 1 bilhão), parando sozinho ao terminar.
@@ -88,12 +89,14 @@ src/             o aplicativo (WinForms, .NET Framework 4.8, sem dependências d
   Macro*.cs        Macro Studio: formato .vcmacro, gravador (ganchos só durante a gravação), regras de passos,
                    janela vinculada, player com proteção a cada passo, condições "esperar até…" e a janela do Studio
   SmartTargets.cs  alvo inteligente: busca por UI Automation, captura de tela, conferência antes do clique, leitura do F7
+  SafeClick.cs / MacroPreview.cs / SimulationDialog.cs  SafeClick: ações impactantes e aprovação, captura e
+                   avaliação passiva dos passos, janela da simulação e revisão de segurança
   ImageTarget.cs   reconhecimento de imagem (correlação normalizada em blocos de 8 px; funções puras, testáveis)
   Hotkey.cs        atalhos globais (RegisterHotKey) e validação
   Settings.cs      configurações em .ini, com validação e fallback seguro
   MainForm.cs      janela principal;  Controls.cs / Theme.cs / Icons.cs  teclas, LEDs, display e ícones desenhados (DESIGN.md)
   Loc.cs           textos em português e inglês
-tests/           executor de testes sem dependências (99 testes unitários + 8 de integração)
+tests/           executor de testes sem dependências (111 testes unitários + 8 de integração)
 assets/          ícone do app e identidade visual (assets/brand: ícone, logos e artes da marca)
 docs/            capturas de tela
 ```

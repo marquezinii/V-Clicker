@@ -45,6 +45,17 @@ Hoje, se o aplicativo fecha e reabre a própria janela (alguns jogos fazem isso 
 uma janela de abertura com o mesmo executável), a sessão para como "janela fechada". Opção futura: por 2 a 3 s, procurar
 outra janela do mesmo processo ou executável e continuar nela.
 
+## Nova rodada (SafeClick → Profiles → Interface adaptativa → Developer Mode → AI Macro Builder)
+
+- **SafeClick V1:** implementado ([design](superpowers/specs/2026-10-21-safeclick-design.md)): simulação passiva sobre
+  uma captura da janela, revisão de segurança antes de atalhos impactantes (uma vez por versão da macro) e limite
+  opcional de duração.
+- **SafeClick, depois da V1:** camada de marcadores sobre a janela real do aplicativo (exige lidar com
+  compatibilidade, posicionamento e foco); ficou fora da V1 por decisão do usuário.
+- **Próximos:** Profiles (perfis automáticos por aplicativo; o conflito com exportar/importar e com atalhos no perfil
+  será decidido no design dele), Interface adaptativa, Developer Mode, AI Macro Builder (exige decidir sobre a
+  promessa de "sem rede").
+
 ## Fase de produtividade
 
 Ordem: Macro Studio → Conditional Click → Smart Target. Ficam isoladas na janela do Macro Studio; o usuário casual

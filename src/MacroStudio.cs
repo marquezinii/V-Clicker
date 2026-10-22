@@ -67,9 +67,9 @@ namespace VClicker
         private long flashUntil;
 
         private ChoiceBox macroList;
-        private KeyButton bNew, bRename, bDelete, bSave, bRecord, bRun, bStop;
-        private NumberField fRepeat;
-        private LedCheck chkForever;
+        private KeyButton bNew, bRename, bDelete, bSave, bRecord, bRun, bSimulate, bStop;
+        private NumberField fRepeat, fLimit;
+        private LedCheck chkForever, chkLimit;
         private LedBadge status;
         private Label statusText;
         private TableLayoutPanel banners;
@@ -118,7 +118,13 @@ namespace VClicker
         // ------------------------------------------------------------------ state the main window reads
 
         /// <summary>Recording (or counting down to it) or running a macro.</summary>
-        public bool Busy => recordStartAt != 0 || recorder != null || player.Phase != MacroPhase.Idle || conditionDialogOpen || analyzing != null;
+        public bool Busy => recordStartAt != 0 || recorder != null || player.Phase != MacroPhase.Idle || conditionDialogOpen || simulating || analyzing != null;
+
+        // The simulation is open: like the condition dialog, nothing else starts or edits the macro meanwhile.
+        private bool simulating;
+
+        /// <summary>The local copy an unsaved macro's safety approval belongs to: new for every macro opened or created.</summary>
+        private string sessionInstance = Guid.NewGuid().ToString("N");
 
         // The condition dialog is open: F7 is swallowed, the clicker cannot start and nothing else edits the macro.
         private bool conditionDialogOpen;
@@ -144,6 +150,8 @@ namespace VClicker
         internal Func<string, List<AppWindow>> ListWindows = exe => WindowLock.List(exe);
         internal Func<string, List<AppWindow>, AppWindow> PickWindow;
         internal bool AcceptInjectedInput;
+        /// <summary>Answers the safety review instead of the dialog (tests).</summary>
+        internal Func<List<ImpactfulAction>, ReviewChoice> ReviewSafety;
 
         private AppWindow Pick(string prompt, List<AppWindow> windows) =>
             PickWindow != null ? PickWindow(prompt, windows) : WindowPicker.Pick(this, prompt, windows);
@@ -186,7 +194,7 @@ namespace VClicker
         /// <summary>The capture hotkey: true when the Studio was waiting for it (the main window then ignores it).</summary>
         public bool OnCaptureHotkey()
         {
-            if (conditionDialogOpen || analyzing != null) return true;
+            if (conditionDialogOpen || simulating || analyzing != null) return true;
             if (captureIndex < 0) return false;
             int index = captureIndex;
             AppWindow window = captureWindow;
@@ -462,11 +470,12 @@ namespace VClicker
             bRecord = Button("studio.record", ButtonKind.Secondary, delegate { BeginRecording(); }, 118);
             bRecord.Led = Theme.Danger;
             bRun = Button("studio.run", ButtonKind.Primary, delegate { BeginRun(); }, 118);
+            bSimulate = Button("studio.simulate", ButtonKind.Secondary, delegate { BeginSimulation(); }, 110);
             bStop = Button("studio.stop", ButtonKind.Secondary, delegate { StopAll(MacroStopReason.Manual); }, 94);
             var repeatLabel = new Label
             {
                 AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Font = Theme.Legend(9.75f),
-                Margin = Theme.Pad(18, 9, 8, 0), UseMnemonic = false
+                Margin = Theme.Pad(0, 9, 8, 0), UseMnemonic = false
             };
             Localize(() => repeatLabel.Text = Loc.T("studio.repeat"));
             fRepeat = new NumberField { Minimum = 1, Maximum = 1000000, Size = Theme.Sz(92, 36), Margin = Theme.Pad(0, 0, 14, 0) };
@@ -476,7 +485,18 @@ namespace VClicker
             chkForever = new LedCheck { Margin = Theme.Pad(0, 5, 0, 0) };
             Localize(() => chkForever.Text = Loc.T("studio.forever"));
             chkForever.CheckedChanged += delegate { if (!loadingUi) SetRepeat(); };
-            run.Controls.AddRange(new Control[] { bRecord, bRun, bStop, repeatLabel, fRepeat, chkForever });
+            run.Controls.AddRange(new Control[] { bRecord, bRun, bSimulate, bStop });
+
+            // Third: how many times, and how long at most (SafeClick: an explicit, optional duration limit).
+            FlowLayoutPanel options = Bar();
+            chkLimit = new LedCheck { Margin = Theme.Pad(28, 5, 8, 0) };
+            Localize(() => chkLimit.Text = Loc.T("studio.limit"));
+            chkLimit.CheckedChanged += delegate { if (!loadingUi) SetLimit(); };
+            fLimit = new NumberField { Minimum = 1, Maximum = Macro.MaxLimitMinutes, Size = Theme.Sz(104, 36), Unit = "min", Margin = Padding.Empty };
+            fLimit.Number = 60;
+            fLimit.FieldName = "Duration limit";
+            fLimit.ValueChanged += delegate { if (!loadingUi) SetLimit(); };
+            options.Controls.AddRange(new Control[] { repeatLabel, fRepeat, chkForever, chkLimit, fLimit });
 
             // The display: the status line (the same text the indicator shows, which may be turned off), then what to know
             // about this macro, on one glass, like the main window's display.
@@ -567,6 +587,7 @@ namespace VClicker
             Controls.Add(edits);
             Controls.Add(gap);
             Controls.Add(display);
+            Controls.Add(options);
             Controls.Add(run);
             Controls.Add(top);
 
@@ -1075,6 +1096,16 @@ namespace VClicker
             UpdateTitle();
         }
 
+        private void SetLimit()
+        {
+            int limit = chkLimit.Checked ? Math.Max(1, fLimit.Value) : 0;
+            fLimit.Enabled = chkLimit.Checked && !Busy;
+            if (limit == macro.LimitMinutes) return;
+            macro.LimitMinutes = limit;
+            dirty = true;
+            UpdateTitle();
+        }
+
         private void OptimizePauses()
         {
             List<int> waits = macro.LongWaits().ToList();
@@ -1154,6 +1185,7 @@ namespace VClicker
         {
             macro = loaded;
             path = file;
+            sessionInstance = Guid.NewGuid().ToString("N");
             dirty = false;
             undo.Clear();
             redo.Clear();
@@ -1189,6 +1221,7 @@ namespace VClicker
                 macro.Name = name;
                 path = Path.Combine(folder, MacroFile.SafeFileName(name) + MacroFile.Extension);
             }
+            bool firstSave = !File.Exists(path);
             try
             {
                 MacroFile.Save(macro, path);
@@ -1197,6 +1230,14 @@ namespace VClicker
             {
                 SetMessage(Loc.F("mmsg.saveFailed", error.Message), Theme.Danger);
                 return false;
+            }
+            // Approved before its first save: the new file is the same copy the user approved.
+            string signature = SafeClick.Signature(macro), unsaved = SafeClick.ApprovalKey(signature, sessionInstance);
+            if (firstSave && settings.IsApproved(unsaved))
+            {
+                settings.ApprovedMacros.Remove(unsaved);
+                settings.Approve(ApprovalKey(signature));
+                host?.SaveSettings();
             }
             dirty = false;
             SetMessage(Loc.T("mmsg.saved"), Theme.Success);
@@ -1404,6 +1445,7 @@ namespace VClicker
                 Refuse(Loc.F("mmsg.hotkeyStep", i + 1, pressed));
                 return;
             }
+            if (!Reviewed()) return;
             List<AppWindow> windows = ListWindows(macro.ExeName);
             if (windows.Count == 0)
             {
@@ -1443,6 +1485,64 @@ namespace VClicker
             RefreshAll();
         }
 
+        /// <summary>This macro's safety approval: its content and this local copy (the file, or this session for an unsaved one).</summary>
+        private string ApprovalKey(string signature) => SafeClick.ApprovalKey(signature, SafeClick.FileInstance(path) ?? sessionInstance);
+
+        /// <summary>
+        /// SafeClick: before running a macro with impactful actions, the safety review, once per version of this copy.
+        /// Approving records that the user saw the risks; it never promises the macro is safe.
+        /// </summary>
+        /// <returns>false = do not run now.</returns>
+        private bool Reviewed()
+        {
+            List<ImpactfulAction> impactful = SafeClick.Impactful(macro);
+            if (impactful.Count == 0) return true;
+            string key = ApprovalKey(SafeClick.Signature(macro));
+            if (settings.IsApproved(key)) return true;
+            ReviewChoice choice = ReviewSafety != null ? ReviewSafety(impactful) : SafetyReview.Ask(this, impactful);
+            if (choice == ReviewChoice.Simulate) BeginSimulation();
+            if (choice != ReviewChoice.Run) return false;
+            settings.Approve(key);
+            host?.SaveSettings();
+            return true;
+        }
+
+        /// <summary>SafeClick: the simulation of the current macro against the app as it is now (nothing is sent to it).</summary>
+        internal void BeginSimulation()
+        {
+            if (Busy) return;
+            CommitDetail();
+            if (macro.Steps.Count == 0)
+            {
+                Refuse(Loc.T("mmsg.noSteps"));
+                return;
+            }
+            IntPtr handle = IntPtr.Zero;
+            uint process = 0;
+            List<AppWindow> windows = macro.ExeName.Length > 0 ? ListWindows(macro.ExeName) : new List<AppWindow>();
+            if (windows.Count > 0) // none open: the simulation still lists the steps and their risks
+            {
+                AppWindow chosen = windows.Count == 1 ? windows[0] : Pick(Loc.F("picker.which", windows[0].DisplayName), windows);
+                if (chosen == null || !Accessible(chosen)) return;
+                handle = chosen.Handle;
+                process = chosen.ProcessId;
+            }
+            Macro copy = macro.Clone();
+            simulating = true;
+            UpdateEnabled();
+            try
+            {
+                using (var dialog = new SimulationDialog(copy, cancel => MacroPreview.Evaluate(copy, handle, process, WindowShot.Take, cancel),
+                                                         list.SelectedIndex))
+                {
+                    dialog.ShowDialog(this);
+                    if (dialog.Step < macro.Steps.Count) list.SelectedIndex = dialog.Step;
+                }
+            }
+            finally { simulating = false; }
+            UpdateEnabled();
+        }
+
         private void OnPlayerStopped(MacroStopReason reason)
         {
             if (player.Phase != MacroPhase.Idle) return; // a new run already started
@@ -1450,7 +1550,7 @@ namespace VClicker
             runWindow = null;
             shownStep = -1;
             bool fine = reason == MacroStopReason.Completed || reason == MacroStopReason.Manual;
-            string text = Loc.F("mstop." + reason, name);
+            string text = Loc.F("mstop." + reason, name, Macro.LimitText(macro.LimitMinutes));
             int at = player.StepIndex;
             if (reason == MacroStopReason.TargetTimeout && at < macro.Steps.Count && macro.Steps[at].Target != null)
                 text = TargetStopText(macro.Steps[at], player.LastTarget) + " " + Loc.F("mstop.noClick", at + 1);
@@ -1680,11 +1780,13 @@ namespace VClicker
             bool idle = !busy && captureIndex < 0;
             int index = list.SelectedIndex;
             bRecord.Enabled = bRun.Enabled = idle;
+            bSimulate.Enabled = idle && macro.Steps.Count > 0;
             bStop.SubLegend = settings.StopKey.ToString();
             bStop.Enabled = busy || captureIndex >= 0;
             bNew.Enabled = bRename.Enabled = bDelete.Enabled = bSave.Enabled = macroList.Enabled = idle;
             fRepeat.Enabled = idle && !chkForever.Checked;
-            chkForever.Enabled = idle;
+            chkForever.Enabled = chkLimit.Enabled = idle;
+            fLimit.Enabled = idle && chkLimit.Checked;
             bUp.Enabled = idle && index > 0;
             bDown.Enabled = idle && index >= 0 && index < macro.Steps.Count - 1;
             bDuplicate.Enabled = bRemove.Enabled = idle && index >= 0;
@@ -1704,6 +1806,8 @@ namespace VClicker
             loadingUi = true;
             chkForever.Checked = macro.Repeat == 0;
             fRepeat.Number = Math.Max(1, macro.Repeat);
+            chkLimit.Checked = macro.LimitMinutes > 0;
+            if (macro.LimitMinutes > 0) fLimit.Number = macro.LimitMinutes;
             loadingUi = false;
             RefreshList();
             RefreshMacroList();
