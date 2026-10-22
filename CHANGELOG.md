@@ -22,6 +22,9 @@ All notable changes to this project are documented here. The format follows
   monogram and brand art). The previous cyan/violet brand files were removed.
 
 ### Added
+- **Support ♥** link in the main window's footer: a small window with Ko-fi (card or PayPal) and the Pix key with a
+  Copy button. Opened only when clicked; nothing asks for donations. The simple level's narrow footer leaves the
+  version number out. README "Support" sections added.
 - **AI Macro Builder** (see `docs/superpowers/specs/2026-10-21-ai-macro-builder-design.md`): *Build with AI* in the
   Macro Studio. Choose the app, describe the task, and Claude (`claude-opus-5`, Messages API over HTTPS with a JSON
   Schema-constrained reply) drafts a macro that opens unsaved with a note; nothing runs. Proposed clicks are stored as
