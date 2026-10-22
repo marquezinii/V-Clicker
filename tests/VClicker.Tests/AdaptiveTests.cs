@@ -164,6 +164,24 @@ namespace VClicker.Tests
                 finally { File.Delete(ini); }
             });
 
+            Test("window: on a short, narrow screen the scroll bar's width is counted before keeping it on the screen", () =>
+            {
+                string ini = TempIni();
+                try
+                {
+                    new ClickSettings().Save(ini); // advanced: the widest window
+                    using (MainForm form = Open(ini))
+                    {
+                        var area = new Rectangle(form.Left - 200, form.Top, form.Width + 250, form.Height - 100); // 50 px to spare, too short
+                        form.Left = area.Right - form.Width; // flush with the right edge
+                        form.FitToScreen(area);
+                        True(form.AutoScroll, "scrolls");
+                        True(form.Right <= area.Right, "right edge " + form.Right + " within " + area.Right);
+                    }
+                }
+                finally { File.Delete(ini); }
+            });
+
             Test("simple mode: Start still clicks", () =>
             {
                 string ini = TempIni();

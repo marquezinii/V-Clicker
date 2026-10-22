@@ -101,7 +101,7 @@ src/             o aplicativo (WinForms, .NET Framework 4.8, sem dependências d
   Settings.cs      configurações em .ini, com validação e fallback seguro
   MainForm.cs      janela principal;  Controls.cs / Theme.cs / Icons.cs  teclas, LEDs, display e ícones desenhados (DESIGN.md)
   Loc.cs           textos em português e inglês
-tests/           executor de testes sem dependências (143 testes unitários + 8 de integração)
+tests/           executor de testes sem dependências (144 testes unitários + 8 de integração)
 assets/          ícone do app e identidade visual (assets/brand: ícone, logos e artes da marca)
 docs/            capturas de tela
 ```
