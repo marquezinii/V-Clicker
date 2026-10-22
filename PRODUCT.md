@@ -7,7 +7,8 @@
 windows
 
 Native Windows 10/11 desktop app: WinForms on .NET Framework 4.8, one portable `.exe`, every control painted by the
-app itself (`src/Controls.cs`, `src/Theme.cs`). No web runtime, no third-party UI libraries, no network.
+app itself (`src/Controls.cs`, `src/Theme.cs`). No web runtime, no third-party UI libraries; no network except the
+optional AI Macro Builder, on request.
 
 ## Users
 
@@ -30,7 +31,9 @@ what Windows accepted (not what the game recognised), and stops and explains ins
   click settings (profiles), loaded when it is chosen again; export/import with the app's macros.
 - Macro Studio with "wait until" conditions and Smart Target (find the button by name or appearance, never click on
   ambiguity), and SafeClick: see where a macro would click before running it, without sending anything.
-- One `.exe`, no installer, no telemetry, no network, open source (MIT).
+- One `.exe`, no installer, no telemetry, open source (MIT). Nothing leaves the computer unless the user asks: the only
+  network use is the optional *Build with AI*, with the user's own API key, sending only the task description and the
+  app's name when *Generate* is pressed.
 
 ## Operating Context
 
@@ -48,7 +51,8 @@ macro list (new, rename, delete, save), step list and step editor, long-pause op
 dialogs, undo/redo. SafeClick: simulate (passive, over a window capture), safety review before impactful
 shortcuts, optional duration limit per macro. Developer Mode: command line (`--macro`, `--profile`, `--var`, `--log`,
 `--exit-when-done`) through the same window and safeguards, `{{variables}}` in typed text, JSON Lines run logs that
-never contain typed text, documented file formats (`docs/developer.md`).
+never contain typed text, documented file formats (`docs/developer.md`). AI Macro Builder: optional, a proposal only
+(opens unsaved, clicks wait for a captured point), the user's DPAPI-protected API key.
 
 Constraints: high DPI (every metric through `Theme.Dp`), keyboard and screen-reader access on custom controls,
 dark title bar via DWM, laptop-sized window (scrolls on short screens), PT and EN text lengths, tests drive the real

@@ -62,6 +62,8 @@ namespace VClicker
         public bool Advanced = true;
         /// <summary>Developer Mode: every run is logged (Logs-clicker-YYYY-MM-DD.jsonl) and the Studio can copy a command line.</summary>
         public bool DeveloperMode;
+        /// <summary>AI Macro Builder: the user's Anthropic API key, DPAPI-protected (<see cref="ApiKeys"/>); empty = none.</summary>
+        public string AiKey = string.Empty;
 
         public const int MaxApprovals = 200;
         /// <summary>
@@ -97,6 +99,7 @@ namespace VClicker
             LockName = Printable(LockName, 40); // shown in the badge and the indicator: keep it short
             if (LockName.Length == 0 && LockExe.Length > 0) LockName = Path.GetFileNameWithoutExtension(LockExe);
             ApprovedMacros = ApprovedMacros.Where(k => k != null && ApprovalPattern.IsMatch(k)).Distinct().ToList();
+            if (!ApiKeys.IsProtected(AiKey)) AiKey = string.Empty; // a key in clear text is never used (nor kept)
             if (ApprovedMacros.Count > MaxApprovals) ApprovedMacros.RemoveRange(0, ApprovedMacros.Count - MaxApprovals);
 
             if (!ToggleKey.IsAcceptable) ToggleKey = DefaultToggle;
@@ -209,6 +212,7 @@ namespace VClicker
             yield return "Language=" + Language;
             yield return "Advanced=" + Advanced;
             yield return "DeveloperMode=" + DeveloperMode;
+            yield return "AiKey=" + AiKey;
             yield return "ApprovedMacros=" + string.Join(",", ApprovedMacros);
         }
 
@@ -257,6 +261,7 @@ namespace VClicker
             if (pairs.TryGetValue("Language", out string language)) Language = language.ToLowerInvariant();
             Advanced = Bool(pairs, "Advanced", Advanced);
             DeveloperMode = Bool(pairs, "DeveloperMode", DeveloperMode);
+            if (pairs.TryGetValue("AiKey", out string aiKey)) AiKey = aiKey;
             if (pairs.TryGetValue("ApprovedMacros", out string approved))
                 ApprovedMacros = approved.Split(',').Select(k => k.Trim()).Where(k => k.Length > 0).ToList();
         }

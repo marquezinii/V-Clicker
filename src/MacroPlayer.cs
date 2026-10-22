@@ -350,6 +350,7 @@ namespace VClicker
                 case StepKind.Click:
                 case StepKind.DoubleClick:
                 {
+                    if (step.WaitsForPoint) throw new EndRun(MacroStopReason.Unsupported); // never clicked at a guess
                     // A target is clicked where it is found now; its recorded point is never used.
                     Do(sink.MoveTo(step.Target != null ? FindTarget(step) : Check(step).Screen));
                     Press(step.Button);

@@ -22,6 +22,13 @@ All notable changes to this project are documented here. The format follows
   monogram and brand art). The previous cyan/violet brand files were removed.
 
 ### Added
+- **AI Macro Builder** (see `docs/superpowers/specs/2026-10-21-ai-macro-builder-design.md`): *Build with AI* in the
+  Macro Studio. Choose the app, describe the task, and Claude (`claude-opus-5`, Messages API over HTTPS with a JSON
+  Schema-constrained reply) drafts a macro that opens unsaved with a note; nothing runs. Proposed clicks are stored as
+  `click <button> pending` and are never clicked until a point is captured (F7) or typed, or a smart target is set:
+  Run refuses them, the player stops before them and the simulation shows them without a place. Only the description
+  and the app's name are sent, only when *Generate* is pressed, with the user's own API key, kept DPAPI-protected in
+  the settings (`AiKey=`; a clear-text key is ignored). Every proposed step is validated like a `.vcmacro` line.
 - **Developer Mode** (see `docs/superpowers/specs/2026-10-21-developer-mode-design.md` and `docs/developer.md`):
   - Command line: `--macro <file|name>` runs a macro through the Macro Studio's Run, `--profile <exe|name>` starts
     an app's profile through Start, with `--var name=value`, `--log file.jsonl` and `--exit-when-done` (exit codes:

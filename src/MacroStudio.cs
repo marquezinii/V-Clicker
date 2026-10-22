@@ -67,7 +67,9 @@ namespace VClicker
         private long flashUntil;
 
         private ChoiceBox macroList;
-        private KeyButton bNew, bRename, bDelete, bSave, bRecord, bRun, bSimulate, bStop, bCommand;
+        private KeyButton bNew, bRename, bDelete, bSave, bRecord, bRun, bSimulate, bStop, bCommand, bAi;
+        // The open macro is an AI proposal: the note shown above it (null = not a proposal).
+        private string aiNote;
 
         /// <summary>Values the command line gave for the next run's {{variables}}.</summary>
         internal IDictionary<string, string> CommandValues;
@@ -232,6 +234,7 @@ namespace VClicker
                     {
                         macro.Steps[index].At = at;
                         macro.Steps[index].Window = reference;
+                        macro.Steps[index].NeedsPoint = false;
                     });
                     SetMessage(Loc.F("mmsg.captured", at.X, at.Y), Theme.Success);
                     host?.Beep(false);
@@ -473,7 +476,8 @@ namespace VClicker
             bRename = Button("studio.rename", ButtonKind.Secondary, delegate { RenameMacro(); }, 104);
             bDelete = Button("studio.delete", ButtonKind.Secondary, delegate { DeleteMacro(); }, 94);
             bSave = Button("studio.save", ButtonKind.Secondary, delegate { Save(); }, 94);
-            top.Controls.AddRange(new Control[] { macroList, bNew, bRename, bDelete, bSave });
+            bAi = Button("studio.ai", ButtonKind.Secondary, delegate { BuildWithAi(); }, 130);
+            top.Controls.AddRange(new Control[] { macroList, bNew, bRename, bDelete, bSave, bAi });
 
             // Second: record / run, how many times, stop. Record is a graphite key with a red lamp that lights while it records.
             FlowLayoutPanel run = Bar();
@@ -683,6 +687,12 @@ namespace VClicker
                 banners.Controls.Add(ActionBanner(Loc.T("banner.longPause.title"), Loc.T("banner.longPause"), Theme.Warning,
                     "banner.longPause.button", OptimizePauses));
             var notes = new List<Tuple<string, Color>>();
+            if (aiNote != null)
+            {
+                notes.Add(Tuple.Create(Loc.T("banner.ai"), Theme.Warning));
+                if (aiNote.Length > 0) notes.Add(Tuple.Create(aiNote, Theme.Dim));
+            }
+            else if (macro.Steps.Any(st => st.WaitsForPoint)) notes.Add(Tuple.Create(Loc.T("banner.needsPoint"), Theme.Warning));
             if (macro.HasUnknown) notes.Add(Tuple.Create(Loc.T("banner.unknown"), Theme.Danger));
             if (macro.HasPassword) notes.Add(Tuple.Create(Loc.T("banner.password"), Theme.Warning));
             if (macro.HasText) notes.Add(Tuple.Create(Loc.T("banner.text"), Theme.Dim));
@@ -737,6 +747,7 @@ namespace VClicker
                         : step.Kind == StepKind.Unknown ? Theme.Danger
                         : step.Kind == StepKind.Wait ? Theme.Dim : Theme.Text;
             if (step.Kind == StepKind.Wait && step.DurationMs >= Macro.LongWaitMs) color = Theme.Warning;
+            if (step.WaitsForPoint) color = Theme.Warning;
             int x = e.Bounds.Left + Theme.Dp(8);
             if (current) Theme.DrawLed(g, new PointF(x + 4 * k, e.Bounds.Top + e.Bounds.Height / 2f), 7 * k, Theme.Success, true);
             var number = new Rectangle(x + Theme.Dp(8), e.Bounds.Top, Theme.Dp(28), e.Bounds.Height);
@@ -816,8 +827,11 @@ namespace VClicker
             if (step.Target != null && (step.Kind == StepKind.Click || step.Kind == StepKind.DoubleClick)) TargetDetail(body, step, index, editable);
             else if (step.IsMouse)
             {
-                Pair(body, "X", Coordinate(step.At.X, v => step.At = new Point(v, step.At.Y), editable));
-                Pair(body, "Y", Coordinate(step.At.Y, v => step.At = new Point(step.At.X, v), editable));
+                // Typing both X and Y gives a proposed click its place, like a capture; one alone would click at an edge.
+                if (step.WaitsForPoint) Full(body, Note(Loc.T("banner.needsPoint"), Theme.Warning, 9f));
+                bool typedX = false, typedY = false;
+                Pair(body, "X", Coordinate(step.At.X, v => { step.At = new Point(v, step.At.Y); typedX = true; if (typedY) step.NeedsPoint = false; }, editable));
+                Pair(body, "Y", Coordinate(step.At.Y, v => { step.At = new Point(step.At.X, v); typedY = true; if (typedX) step.NeedsPoint = false; }, editable));
                 if (step.Kind == StepKind.Drag)
                 {
                     Pair(body, "studio.toX", Coordinate(step.To.X, v => step.To = new Point(v, step.To.Y), editable));
@@ -1200,6 +1214,7 @@ namespace VClicker
         {
             macro = loaded;
             path = file;
+            aiNote = null;
             sessionInstance = Guid.NewGuid().ToString("N");
             dirty = false;
             undo.Clear();
@@ -1255,6 +1270,7 @@ namespace VClicker
                 host?.SaveSettings();
             }
             dirty = false;
+            aiNote = null; // saved: it is the user's macro now
             SetMessage(Loc.T("mmsg.saved"), Theme.Success);
             RefreshMacroList();
             UpdateTitle();
@@ -1410,6 +1426,7 @@ namespace VClicker
                 {
                     if (!recordAppend)
                     {
+                        aiNote = null; // a new recording replaced the proposal
                         macro.Steps = steps;
                         macro.ExeName = window.ExeName;
                         macro.Title = window.Title;
@@ -1446,6 +1463,13 @@ namespace VClicker
             if (macro.HasUnknown)
             {
                 Refuse(Loc.T("mstop.Unsupported"));
+                return;
+            }
+            int pending = macro.Steps.FindIndex(s => s.WaitsForPoint);
+            if (pending >= 0)
+            {
+                list.SelectedIndex = pending;
+                Refuse(Loc.F("mmsg.needsPoint", pending + 1));
                 return;
             }
             // Windows fires V-Clicker's hotkeys for keys a macro presses too: F8 in a macro would stop it.
@@ -1607,6 +1631,35 @@ namespace VClicker
             BringBack();
             RefreshAll();
             host?.MacroRunEnded(reason);
+        }
+
+        /// <summary>
+        /// AI Macro Builder: choose the app, describe the task, get a proposal. It opens unsaved with a note; nothing runs.
+        /// </summary>
+        private void BuildWithAi()
+        {
+            if (Busy || !ConfirmDiscard()) return;
+            AppWindow chosen = Pick(Loc.T("picker.ai"), ListWindows(null));
+            if (chosen == null) return;
+            var bound = new Macro { ExeName = chosen.ExeName, Title = chosen.Title };
+            using (MacroTarget.PerMonitorDpi()) bound.ClientSize = WindowLock.ClientArea(chosen.Handle).Size;
+            AiProposal proposal;
+            using (var dialog = new AiDialog(settings, () => host?.SaveSettings(), chosen.DisplayName, bound))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                proposal = dialog.Result;
+            }
+            OpenProposal(proposal);
+        }
+
+        /// <summary>Shows an AI proposal: unsaved (closing asks), with its note, never run.</summary>
+        internal void OpenProposal(AiProposal proposal)
+        {
+            Open(proposal.Macro, null);
+            aiNote = proposal.Note ?? string.Empty;
+            dirty = true;
+            SetMessage(Loc.T("banner.ai"), Theme.Warning);
+            RefreshAll();
         }
 
         /// <summary>Developer Mode: the command line that runs this macro, on the clipboard.</summary>
@@ -1854,7 +1907,7 @@ namespace VClicker
             bSimulate.Enabled = idle && macro.Steps.Count > 0;
             bStop.SubLegend = settings.StopKey.ToString();
             bStop.Enabled = busy || captureIndex >= 0;
-            bNew.Enabled = bRename.Enabled = bDelete.Enabled = bSave.Enabled = macroList.Enabled = idle;
+            bNew.Enabled = bRename.Enabled = bDelete.Enabled = bSave.Enabled = bAi.Enabled = macroList.Enabled = idle;
             fRepeat.Enabled = idle && !chkForever.Checked;
             chkForever.Enabled = chkLimit.Enabled = idle;
             fLimit.Enabled = idle && chkLimit.Checked;

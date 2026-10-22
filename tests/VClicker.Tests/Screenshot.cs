@@ -30,6 +30,7 @@ namespace VClicker.Tests
             if (Array.IndexOf(options, "simulation") >= 0) return TakeSimulation(output, language);
             if (Array.IndexOf(options, "review") >= 0) return TakeReview(output, language);
             if (Array.IndexOf(options, "profiles") >= 0) return TakeProfiles(output, language);
+            if (Array.IndexOf(options, "ai") >= 0) return TakeAi(output, language);
             try
             {
                 new ClickSettings { Language = language, StartDelaySeconds = 0, Sounds = false, IntervalMs = 100, Advanced = Array.IndexOf(options, "simple") < 0 }.Save(ini);
@@ -210,6 +211,29 @@ namespace VClicker.Tests
             };
             using (var dialog = new SafetyReview(actions))
             {
+                dialog.StartPosition = FormStartPosition.Manual;
+                dialog.Location = new Point(60, 40);
+                dialog.Show();
+                Pump(500);
+                Rectangle bounds = dialog.Bounds;
+                using (var picture = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb))
+                {
+                    dialog.DrawToBitmap(picture, new Rectangle(Point.Empty, bounds.Size));
+                    picture.Save(output, ImageFormat.Png);
+                }
+            }
+            return 0;
+        }
+
+        /// <summary>The AI Macro Builder window, first use (<c>--screenshot out.png pt ai</c>).</summary>
+        private static int TakeAi(string output, string language)
+        {
+            Loc.SetLanguage(language);
+            using (var dialog = new AiDialog(new ClickSettings(), null, "Roblox", new Macro { ExeName = "RobloxPlayerBeta.exe" }))
+            {
+                dialog.Description = language == "en"
+                    ? "Click this button every two seconds, but only while this window is open."
+                    : "Clique neste botão a cada dois segundos, mas só enquanto esta janela estiver aberta.";
                 dialog.StartPosition = FormStartPosition.Manual;
                 dialog.Location = new Point(60, 40);
                 dialog.Show();

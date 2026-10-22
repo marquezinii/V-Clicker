@@ -39,6 +39,10 @@
     <Reference Include="WindowsBase" />
     <!-- Ships with .NET Framework: sends deleted macros to the Recycle Bin. -->
     <Reference Include="Microsoft.VisualBasic" />
+    <!-- Ship with .NET Framework: the optional AI Macro Builder (HTTPS, JSON, the API key protected with DPAPI). -->
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Security" />
+    <Reference Include="System.Web.Extensions" />
   </ItemGroup>
 
 </Project>
