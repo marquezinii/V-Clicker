@@ -48,6 +48,7 @@ namespace VClicker.Tests
                 {
                     IntPtr handle = dialog.Handle;
                     Equal("https://ko-fi.com/vemryx", SupportDialog.KofiUrl, "Ko-fi page");
+                    True(dialog.Qr != null && dialog.Qr.Width == dialog.Qr.Height && dialog.Qr.Width >= 200, "the Pix QR is embedded: " + dialog.Qr?.Size);
                     True(All(dialog).OfType<TextBox>().Any(t => t.Text == SupportDialog.PixKey && t.ReadOnly), "the Pix key, read-only");
                     dialog.CopyPix();
                     True(dialog.StatusText == Loc.T("support.copied") || dialog.StatusText == SupportDialog.PixKey, "copied (or shown when the clipboard is busy)");
