@@ -22,6 +22,13 @@ All notable changes to this project are documented here. The format follows
   monogram and brand art). The previous cyan/violet brand files were removed.
 
 ### Added
+- **Profiles per app** (see `docs/superpowers/specs/2026-10-21-profiles-design.md`): with the Window Lock on, the
+  click settings (speed, jitter, button, type, repeats, position, start delay, hotkey mode, focus-loss mode) are kept
+  per app executable in `Profiles\<exe>.vcprofile` and loaded when the app is chosen again, or when the lock is turned
+  on, never during a run. Hotkeys, window options, sounds and language stay global. A *Profiles* window (footer link)
+  lists them and exports one, with the app's saved macros, to a single `.vcprofile` file, or imports one (values are
+  validated like the settings; unreadable macros or macros of another app are left out; an identical macro is not
+  duplicated; imported macros go through the SafeClick review on first use).
 - **SafeClick** (see `docs/superpowers/specs/2026-10-21-safeclick-design.md`):
   - *Simulate* in the Macro Studio: a still of the app's window (captured without focusing it) with each step's
     place marked, one step at a time, using the same position, target and condition code as a run. Nothing is

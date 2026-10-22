@@ -21,7 +21,7 @@ namespace VClicker
         private const int RowHeight = 32; // clusters and fields in the settings rows
         private static readonly Padding RowGap = Theme.Pad(0, 0, 0, 6);
 
-        private readonly string settingsPath;
+        private readonly string settingsPath, profileFolder;
         private readonly ClickSettings settings;
         private readonly ClickEngine engine;
         private readonly List<Action> localizers = new List<Action>();
@@ -77,6 +77,7 @@ namespace VClicker
         internal MainForm(string settingsPath, IClickSink sink)
         {
             this.settingsPath = settingsPath;
+            profileFolder = Profiles.Folder(settingsPath);
             engine = new ClickEngine(sink);
             settings = ClickSettings.Load(settingsPath);
             Loc.SetLanguage(settings.Language);
@@ -111,6 +112,8 @@ namespace VClicker
         }
 
         internal ClickEngine Engine => engine;
+
+        internal ClickSettings Settings => settings;
 
         /// <summary>Called when a second instance is launched: bring this window back.</summary>
         public void ShowFromTray()
@@ -628,13 +631,61 @@ namespace VClicker
         private void OnChooseLockApp(object sender, EventArgs e)
         {
             AppWindow chosen = WindowPicker.Pick(this, Loc.T("picker.hint"), WindowLock.List());
-            if (chosen == null) return;
+            if (chosen != null) UseLockApp(chosen);
+        }
+
+        /// <summary>The Window Lock app chosen: its profile, if it has one, replaces the click settings.</summary>
+        internal void UseLockApp(AppWindow chosen)
+        {
+            if (engine.Phase != EnginePhase.Idle) return; // a profile never changes during a run
             settings.LockExe = chosen.ExeName;
             settings.LockName = chosen.DisplayName;
             settings.Validate();
             ShowLockApp();
-            if (chkLock.Checked) SaveSettings();
-            else chkLock.Checked = true; // choosing an app means "use it"; saves through OnConfigChanged
+            if (!chkLock.Checked)
+            {
+                chkLock.Checked = true; // choosing an app means "use it"; OnConfigChanged loads its profile and saves
+                return;
+            }
+            LoadProfile();
+            SaveSettings();
+            SaveProfile();
+        }
+
+        /// <summary>The locked app's profile replaces the click settings (only when stopped; none = nothing changes).</summary>
+        private void LoadProfile()
+        {
+            if (engine.Phase != EnginePhase.Idle || settings.LockExe.Length == 0) return;
+            AppProfile profile = Profiles.Load(profileFolder, settings.LockExe);
+            if (profile == null) return;
+            Profiles.CopyFields(profile.Settings, settings);
+            ApplySettingsToUi();
+            ShowNotice(Loc.F("msg.profileLoaded", settings.LockName, Profiles.Summary(settings)), Theme.Success, 6);
+        }
+
+        /// <summary>With the Window Lock on, the click settings are also the locked app's profile.</summary>
+        private void SaveProfile()
+        {
+            if (!settings.WindowLock || settings.LockExe.Length == 0) return;
+            var profile = new AppProfile { ExeName = settings.LockExe, Name = settings.LockName, UsedUtc = DateTime.UtcNow };
+            Profiles.CopyFields(settings, profile.Settings);
+            Profiles.Save(profileFolder, profile); // same folder as the settings: SaveSettings already reports a failure
+        }
+
+        /// <summary>An imported profile for the locked app takes effect now if nothing runs (else when the app is chosen again).</summary>
+        internal void ProfileImported(AppProfile profile)
+        {
+            if (!settings.WindowLock || !profile.ExeName.Equals(settings.LockExe, StringComparison.OrdinalIgnoreCase) ||
+                engine.Phase != EnginePhase.Idle) return;
+            Profiles.CopyFields(profile.Settings, settings);
+            ApplySettingsToUi();
+            SaveSettings();
+        }
+
+        private void OpenProfiles()
+        {
+            using (var dialog = new ProfilesDialog(profileFolder, MacroFile.Folder(settingsPath), this)) dialog.ShowDialog(this);
+            if (studio != null && !studio.IsDisposed) studio.ReloadMacroList(); // imported macros
         }
 
         private static Label Axis(string text) => new Label
@@ -678,7 +729,7 @@ namespace VClicker
 
         private Control BuildFooter()
         {
-            Grid footer = Table("auto", "100%");
+            Grid footer = Table("auto", "100%", "auto");
             footer.Margin = Theme.Pad(0, 8, 0, 0);
 
             // "Made by Vemryx  ·  GitHub  ·  v1.0.0": the maker's name and GitHub are links, the rest is plain.
@@ -721,7 +772,22 @@ namespace VClicker
                 });
             }
 
-            Row(footer, credits, adminLink);
+            var profilesLink = new LinkLabel
+            {
+                AutoSize = true, Font = Theme.Legend(9f), BackColor = Theme.Bg, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, UseCompatibleTextRendering = true,
+                LinkColor = Theme.Text, ActiveLinkColor = Theme.Cap, VisitedLinkColor = Theme.Text,
+                LinkBehavior = LinkBehavior.HoverUnderline, Margin = Padding.Empty
+            };
+            Localize(() =>
+            {
+                profilesLink.Text = Loc.T("link.profiles");
+                tips.SetToolTip(profilesLink, Loc.T("link.profiles.tip"));
+            });
+            profilesLink.LinkClicked += delegate { OpenProfiles(); };
+            lockable.Add(profilesLink); // an import during a run could not take effect, and the run's settings would overwrite it
+            adminLink.Margin = Theme.Pad(18, 0, 0, 0);
+
+            Row(footer, credits, profilesLink, adminLink);
             return footer;
         }
 
@@ -846,8 +912,11 @@ namespace VClicker
         private void OnConfigChanged(object sender, EventArgs e)
         {
             if (loading) return;
+            bool wasLocked = settings.WindowLock;
             ReadUi();
+            if (!wasLocked && settings.WindowLock) LoadProfile(); // turning the lock on picks the app's profile up
             SaveSettings();
+            SaveProfile();
             UpdateRateLabel();
             UpdateEnabledState();
             ApplyWindowOptions();

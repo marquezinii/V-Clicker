@@ -29,6 +29,7 @@ namespace VClicker.Tests
             if (Array.IndexOf(options, "condition") >= 0) return TakeCondition(output, language);
             if (Array.IndexOf(options, "simulation") >= 0) return TakeSimulation(output, language);
             if (Array.IndexOf(options, "review") >= 0) return TakeReview(output, language);
+            if (Array.IndexOf(options, "profiles") >= 0) return TakeProfiles(output, language);
             try
             {
                 new ClickSettings { Language = language, StartDelaySeconds = 0, Sounds = false, IntervalMs = 100 }.Save(ini);
@@ -221,6 +222,45 @@ namespace VClicker.Tests
                 }
             }
             return 0;
+        }
+
+        /// <summary>The per-app profiles window (<c>--screenshot out.png pt profiles</c>).</summary>
+        private static int TakeProfiles(string output, string language)
+        {
+            Loc.SetLanguage(language);
+            string dir = Path.Combine(Path.GetTempPath(), "vclicker-shot-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string macros = Path.Combine(dir, "Macros");
+                var examples = new[] { Tuple.Create("RobloxPlayerBeta.exe", "Roblox", 1000.0 / 15, ClickButton.Left, 2),
+                                       Tuple.Create("Cookie Clicker.exe", "Cookie Clicker", 20.0, ClickButton.Left, 0),
+                                       Tuple.Create("javaw.exe", "Minecraft", 100.0, ClickButton.Right, 1) };
+                int day = 0;
+                foreach (var example in examples)
+                {
+                    var profile = new AppProfile { ExeName = example.Item1, Name = example.Item2, UsedUtc = DateTime.UtcNow.AddDays(-day++) };
+                    profile.Settings.IntervalMs = example.Item3;
+                    profile.Settings.Button = example.Item4;
+                    Profiles.Save(dir, profile);
+                    for (int i = 0; i < example.Item5; i++)
+                        MacroFile.Save(new Macro { Name = example.Item2 + " " + i, ExeName = example.Item1 }, Path.Combine(macros, example.Item2 + i + MacroFile.Extension));
+                }
+                using (var dialog = new ProfilesDialog(dir, macros, null))
+                {
+                    dialog.StartPosition = FormStartPosition.Manual;
+                    dialog.Location = new Point(60, 40);
+                    dialog.Show();
+                    Pump(500);
+                    Rectangle bounds = dialog.Bounds;
+                    using (var picture = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb))
+                    {
+                        dialog.DrawToBitmap(picture, new Rectangle(Point.Empty, bounds.Size));
+                        picture.Save(output, ImageFormat.Png);
+                    }
+                }
+                return 0;
+            }
+            finally { Directory.Delete(dir, true); }
         }
 
         /// <summary>The "smart target" dialog after F7 on a button (<c>--screenshot out.png pt target [look]</c>).</summary>
