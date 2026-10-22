@@ -114,6 +114,7 @@ double left 812 440                        clique duplo
 click left 812 440 find element "Button" "Baixar PDF" timeout=10000
 click left 812 440 find element "Button" "OK" id "btnOk" timeout=10000
 click left 812 440 find image <PNG em base64> timeout=10000
+click left pending                         clique proposto pela IA, ainda sem ponto: nunca executa até ser capturado
 drag left 100 200 300 200                  arrastar de (100, 200) até (300, 200)
 hover 50 60                                passar o mouse
 scroll -3 400 300                          rolar 3 entalhes para baixo (positivo = para cima)

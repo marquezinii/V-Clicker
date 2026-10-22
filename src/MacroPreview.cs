@@ -192,7 +192,7 @@ namespace VClicker
         {
             var preview = new StepPreview { Index = index, Kind = step.Kind };
             bool waitFor = step.Kind == StepKind.WaitFor;
-            if (!step.IsMouse && !waitFor)
+            if ((!step.IsMouse && !waitFor) || step.WaitsForPoint)
             {
                 preview.State = PreviewState.NoPosition;
                 return preview;

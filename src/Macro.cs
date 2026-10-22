@@ -131,6 +131,14 @@ namespace VClicker
         /// <summary>Click / DoubleClick: what to click, found before every click (null = the fixed point <see cref="At"/>).</summary>
         public SmartTarget Target;
 
+        /// <summary>
+        /// Click / DoubleClick proposed without a place (the AI Macro Builder never sees the screen): it is never clicked
+        /// until a point is captured or typed, or a target is set.
+        /// </summary>
+        public bool NeedsPoint;
+
+        public bool WaitsForPoint => NeedsPoint && Target == null && (Kind == StepKind.Click || Kind == StepKind.DoubleClick);
+
         public bool IsMouse =>
             Kind == StepKind.Click || Kind == StepKind.DoubleClick || Kind == StepKind.Drag ||
             Kind == StepKind.Hover || Kind == StepKind.Scroll;
@@ -158,6 +166,8 @@ namespace VClicker
                     : Loc.F("step.targetImage", At.X, At.Y);
                 return Loc.F(Kind == StepKind.Click ? "step.clickTarget" : "step.doubleTarget", ButtonName(Button), what) + where;
             }
+            if (WaitsForPoint)
+                return Loc.F(Kind == StepKind.Click ? "step.clickPending" : "step.doublePending", ButtonName(Button), Loc.T("step.pendingPoint"));
             switch (Kind)
             {
                 case StepKind.Click: return Loc.F("step.click", ButtonName(Button), At.X, At.Y) + where;
@@ -468,8 +478,8 @@ namespace VClicker
             string find = step.Target == null ? string.Empty : " " + Find(step.Target);
             switch (step.Kind)
             {
-                case StepKind.Click: return "click " + Btn(step.Button) + " " + Pt(step.At) + find + window;
-                case StepKind.DoubleClick: return "double " + Btn(step.Button) + " " + Pt(step.At) + find + window;
+                case StepKind.Click: return "click " + Btn(step.Button) + " " + (step.NeedsPoint ? "pending" : Pt(step.At)) + find + window;
+                case StepKind.DoubleClick: return "double " + Btn(step.Button) + " " + (step.NeedsPoint ? "pending" : Pt(step.At)) + find + window;
                 case StepKind.Drag: return "drag " + Btn(step.Button) + " " + Pt(step.At) + " " + Pt(step.To) + window;
                 case StepKind.Hover: return "hover " + Pt(step.At) + window;
                 case StepKind.Scroll: return "scroll " + step.Notches.ToString(Inv) + " " + Pt(step.At) + window;
@@ -566,7 +576,13 @@ namespace VClicker
                 case "double":
                 case "drag":
                     step.Kind = t[0] == "click" ? StepKind.Click : t[0] == "double" ? StepKind.DoubleClick : StepKind.Drag;
-                    if (!ParseButton(t, ref i, out step.Button) || !ParsePoint(t, ref i, out step.At)) return unknown;
+                    if (!ParseButton(t, ref i, out step.Button)) return unknown;
+                    if (step.Kind != StepKind.Drag && i < t.Count && t[i] == "pending")
+                    {
+                        step.NeedsPoint = true;
+                        i++;
+                    }
+                    else if (!ParsePoint(t, ref i, out step.At)) return unknown;
                     if (step.Kind == StepKind.Drag && !ParsePoint(t, ref i, out step.To)) return unknown;
                     if (step.Kind != StepKind.Drag && i < t.Count && t[i] == "find" && !ParseFind(t, ref i, out step.Target)) return unknown;
                     break;

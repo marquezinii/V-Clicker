@@ -736,6 +736,17 @@ namespace VClicker.Tests
                             True(logged.Contains("\"kind\":\"macro\"") && logged.Contains("\"reason\":\"Completed\"") && logged.Contains("\"kind\":\"Type\""), logged);
                             True(!logged.Contains("Al1"), "never what was typed");
 
+                            // AI Macro Builder: a proposed click has no point and never runs; given a target, the Studio's Run clicks it.
+                            var proposed = new Macro { ExeName = studio.Current.ExeName, Repeat = 1 };
+                            proposed.Steps.Add(new MacroStep { Kind = StepKind.Click, NeedsPoint = true });
+                            studio.OpenProposal(new AiProposal { Macro = proposed, Note = "test" });
+                            studio.BeginRun();
+                            True(!studio.Busy, "a click without a point is refused");
+                            Equal(6, clicks, "and nothing was clicked");
+                            studio.ConvertToTarget(0, new SmartTarget { Kind = TargetKind.Element, ControlType = "Button", Name = "Baixar PDF" });
+                            RunToEnd("the proposal with a target");
+                            Equal(7, clicks, "the proposed click found its button");
+
                             // Developer Mode: a command's run cut short by closing the window is exit code 1, and the log says so.
                             var waiting = new Macro { Name = "Wait", ExeName = studio.Current.ExeName };
                             waiting.Steps.Add(new MacroStep { Kind = StepKind.Wait, DurationMs = 60000 });

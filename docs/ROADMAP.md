@@ -64,7 +64,12 @@ outra janela do mesmo processo ou executável e continuar nela.
   [referência](developer.md)): linha de comando com códigos de saída, variáveis, logs JSON Lines, formatos documentados.
 - **Developer Mode, depois da V1:** mandar comandos para um V-Clicker já aberto; variáveis em outros passos (atalhos,
   esperas); um modo de teste que só registra, sem enviar nada.
-- **Próximo:** AI Macro Builder (exige decidir sobre a promessa de "sem rede").
+- **AI Macro Builder:** implementado ([design](superpowers/specs/2026-10-21-ai-macro-builder-design.md)): proposta
+  de macro a partir de uma descrição, com a chave do próprio usuário; a promessa passou a ser "nada sai do computador
+  sem você pedir". Cliques propostos ficam sem ponto até serem capturados.
+- **AI Macro Builder, depois da V1:** a IA editar uma macro existente; "esperar até a janela abrir" proposto pela IA
+  (exige identificar a janela, o que a IA não vê); alvos inteligentes sugeridos a partir de uma captura, se o usuário
+  aceitar enviá-la.
 
 ## Fase de produtividade
 
