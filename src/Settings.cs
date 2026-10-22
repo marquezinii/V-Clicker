@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
@@ -78,6 +79,12 @@ namespace VClicker
         {
             ApprovedMacros.Remove(key);
             ApprovedMacros.Add(key);
+            TrimApprovals();
+        }
+
+        // The oldest approvals go first.
+        private void TrimApprovals()
+        {
             if (ApprovedMacros.Count > MaxApprovals) ApprovedMacros.RemoveRange(0, ApprovedMacros.Count - MaxApprovals);
         }
 
@@ -100,7 +107,7 @@ namespace VClicker
             if (LockName.Length == 0 && LockExe.Length > 0) LockName = Path.GetFileNameWithoutExtension(LockExe);
             ApprovedMacros = ApprovedMacros.Where(k => k != null && ApprovalPattern.IsMatch(k)).Distinct().ToList();
             if (!ApiKeys.IsProtected(AiKey)) AiKey = string.Empty; // a key in clear text is never used (nor kept)
-            if (ApprovedMacros.Count > MaxApprovals) ApprovedMacros.RemoveRange(0, ApprovedMacros.Count - MaxApprovals);
+            TrimApprovals();
 
             if (!ToggleKey.IsAcceptable) ToggleKey = DefaultToggle;
             if (!StopKey.IsAcceptable || StopKey.Equals(ToggleKey)) StopKey = DefaultStop;
@@ -171,16 +178,36 @@ namespace VClicker
             try
             {
                 Validate();
-                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)));
-                string temp = path + ".tmp";
-                File.WriteAllLines(temp, Serialize());
-                if (File.Exists(path)) File.Replace(temp, path, null);
-                else File.Move(temp, path);
+                WriteFile(path, string.Concat(Serialize().Select(line => line + Environment.NewLine)));
                 return true;
             }
             catch (IOException) { return false; }
             catch (UnauthorizedAccessException) { return false; }
         }
+
+        /// <summary>
+        /// Writes UTF-8 text through a temporary file, so a crash mid-write never leaves a half-written file. Shared
+        /// by the settings, macro and profile files.
+        /// </summary>
+        internal static void WriteFile(string path, string content)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)));
+            string temp = path + ".tmp";
+            File.WriteAllText(temp, content, new UTF8Encoding(false));
+            if (File.Exists(path)) File.Replace(temp, path, null);
+            else File.Move(temp, path);
+        }
+
+        /// <summary>The files with this extension in <paramref name="folder"/>; none when it is missing or unreadable.</summary>
+        internal static string[] FilesIn(string folder, string extension)
+        {
+            try { return Directory.Exists(folder) ? Directory.GetFiles(folder, "*" + extension) : new string[0]; }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException) { return new string[0]; }
+        }
+
+        /// <summary>A folder next to the settings file (portable mode included): Macros, Profiles, Logs.</summary>
+        internal static string FolderNextTo(string settingsPath, string name) =>
+            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(settingsPath)) ?? ".", name);
 
         internal IEnumerable<string> Serialize()
         {

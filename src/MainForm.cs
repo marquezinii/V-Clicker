@@ -743,7 +743,7 @@ namespace VClicker
         private void OpenProfiles()
         {
             using (var dialog = new ProfilesDialog(profileFolder, MacroFile.Folder(settingsPath), this)) dialog.ShowDialog(this);
-            if (studio != null && !studio.IsDisposed) studio.ReloadMacroList(); // imported macros
+            if (StudioOpen) studio.RefreshMacroList(); // imported macros
         }
 
         private static Label Axis(string text) => new Label
@@ -1167,14 +1167,14 @@ namespace VClicker
             Loc.SetLanguage(settings.Language);
             SaveSettings();
             ApplyLanguage();
-            if (studio != null && !studio.IsDisposed) studio.ApplyLanguage();
+            if (StudioOpen) studio.ApplyLanguage();
         }
 
         // ------------------------------------------------------------------ macro studio
 
         internal MacroStudio OpenStudio()
         {
-            if (studio == null || studio.IsDisposed)
+            if (!StudioOpen)
             {
                 studio = new MacroStudio(this, settings, settingsPath);
                 studio.FormClosed += delegate { studio = null; };
@@ -1188,7 +1188,8 @@ namespace VClicker
             return studio;
         }
 
-        private bool StudioBusy => studio != null && !studio.IsDisposed && studio.Busy;
+        private bool StudioOpen => studio != null && !studio.IsDisposed;
+        private bool StudioBusy => StudioOpen && studio.Busy;
 
         // ------------------------------------------------------------------ developer mode
 
@@ -1244,7 +1245,7 @@ namespace VClicker
         private string MacroPath(string macro)
         {
             if (File.Exists(macro)) return Path.GetFullPath(macro);
-            string saved = Path.Combine(MacroFile.Folder(settingsPath), MacroFile.SafeFileName(macro) + MacroFile.Extension);
+            string saved = MacroFile.PathFor(MacroFile.Folder(settingsPath), macro);
             return File.Exists(saved) ? saved : null;
         }
 
@@ -1404,19 +1405,29 @@ namespace VClicker
 
         private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
         {
-            if (e.Mode != PowerModes.Suspend) return;
-            engine.Stop(StopReason.Suspended);
-            studio?.StopAll(MacroStopReason.Suspended);
+            if (e.Mode == PowerModes.Suspend) StopForSuspend();
         }
 
         private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
         {
             if (e.Reason == SessionSwitchReason.SessionLock || e.Reason == SessionSwitchReason.ConsoleDisconnect ||
                 e.Reason == SessionSwitchReason.RemoteDisconnect)
-            {
-                engine.Stop(StopReason.Suspended);
-                studio?.StopAll(MacroStopReason.Suspended);
-            }
+                StopForSuspend();
+        }
+
+        // The computer is locked or goes to sleep: nothing keeps clicking behind the lock screen.
+        private void StopForSuspend()
+        {
+            engine.Stop(StopReason.Suspended);
+            studio?.StopAll(MacroStopReason.Suspended);
+        }
+
+        // Writes the run's last record and closes its log (if it has one).
+        private void EndClickLog(StopReason reason)
+        {
+            clickLog?.Write("run.stop", "kind", "clicker", "reason", reason.ToString(), "clicks", engine.Clicks,
+                            "elapsedMs", (long)engine.SessionElapsed.TotalMilliseconds);
+            clickLog = null;
         }
 
         private void OnEngineStopped(StopReason reason)
@@ -1442,9 +1453,7 @@ namespace VClicker
                 return;
             }
             lastStop = reason;
-            clickLog?.Write("run.stop", "kind", "clicker", "reason", reason.ToString(), "clicks", engine.Clicks,
-                            "elapsedMs", (long)engine.SessionElapsed.TotalMilliseconds);
-            clickLog = null;
+            EndClickLog(reason);
             if (commandRun == 1) FinishCommand(ExitCodes.For(reason));
             UpdateEnabledState();
             UpdateStartButton();
@@ -1624,7 +1633,7 @@ namespace VClicker
             display.SetRate(FormatCps(Interval.ClicksPerSecond(settings.IntervalMs)), Loc.T("stat.requested"));
             display.SetReadout(0, Loc.T("stat.clicks"), clicks.ToString("N0", CultureInfo.CurrentCulture));
             display.SetReadout(2, Loc.T("stat.time"), FormatElapsed(engine.SessionElapsed));
-            display.SetLock(settings.WindowLock, "LOCK");
+            display.SetLock(settings.WindowLock);
 
             long now = Stopwatch.GetTimestamp();
             string sentText = "—";
@@ -1654,11 +1663,9 @@ namespace VClicker
                     break;
                 default:
                     // Stopped: the lamp is dark, unless it reports how the last run ended.
-                    Color led = lastStop == StopReason.Blocked ? Theme.Danger
-                              : lastStop == StopReason.Completed ? Theme.Success
-                              : lastStop.HasValue && lastStop.Value >= StopReason.FocusLost ? Theme.Warning : Theme.Success;
-                    bool lit = lastStop == StopReason.Blocked || lastStop == StopReason.Completed ||
-                               (lastStop.HasValue && lastStop.Value >= StopReason.FocusLost);
+                    bool problem = lastStop >= StopReason.FocusLost; // false when there was no last run
+                    Color led = lastStop == StopReason.Blocked ? Theme.Danger : problem ? Theme.Warning : Theme.Success;
+                    bool lit = lastStop == StopReason.Blocked || lastStop == StopReason.Completed || problem;
                     display.SetStatus(led, lit, lastStop == StopReason.Blocked ? Loc.T("status.blocked")
                                               : lastStop == StopReason.Completed ? Loc.T("status.done")
                                               : Loc.T("status.idle"));
@@ -1706,10 +1713,7 @@ namespace VClicker
             if (macro != null && settings.Hud)
             {
                 IntPtr window = studio.IndicatorWindow;
-                if (hud == null || hud.IsDisposed) hud = new Hud();
-                Rectangle screen = window != IntPtr.Zero ? Screen.FromHandle(window).Bounds : Screen.PrimaryScreen.Bounds;
-                hud.Display(macro.Item1, macro.Item2, screen, settings.HudCorner);
-                if (++hudTicks % 10 == 0) hud.KeepOnTop();
+                ShowHud(macro.Item1, macro.Item2, window != IntPtr.Zero ? Screen.FromHandle(window).Bounds : Screen.PrimaryScreen.Bounds);
                 return;
             }
             if (!hudArmed || !settings.Hud)
@@ -1744,8 +1748,13 @@ namespace VClicker
                     text = hudFlashText;
                     break;
             }
+            ShowHud(dot, text, hudScreen.IsEmpty ? Screen.PrimaryScreen.Bounds : hudScreen);
+        }
+
+        private void ShowHud(Color dot, string text, Rectangle screen)
+        {
             if (hud == null || hud.IsDisposed) hud = new Hud();
-            hud.Display(dot, text, hudScreen.IsEmpty ? Screen.PrimaryScreen.Bounds : hudScreen, settings.HudCorner);
+            hud.Display(dot, text, screen, settings.HudCorner);
             if (++hudTicks % 10 == 0) hud.KeepOnTop();
         }
 
@@ -1802,7 +1811,7 @@ namespace VClicker
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            Native.StyleTitleBar(Handle, ColorRef(Theme.Bg), ColorRef(Theme.Text), ColorRef(Theme.Border));
+            Native.StyleTitleBar(Handle);
             Native.SetWindowTheme(Handle, "DarkMode_Explorer", null); // dark scroll bars on short screens
             hotkeys = new HotkeyRegistry(Handle);
             RegisterAllHotkeys();
@@ -1823,10 +1832,10 @@ namespace VClicker
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             closing = true;
-            if (studio != null && !studio.IsDisposed)
+            if (StudioOpen)
             {
                 studio.Close(); // asks to save unsaved changes
-                if (studio != null && !studio.IsDisposed && studio.Visible)
+                if (StudioOpen && studio.Visible)
                 {
                     e.Cancel = true;
                     closing = false;
@@ -1836,9 +1845,7 @@ namespace VClicker
             // The engine's stop is never handled once the window is gone: a run cut short here is "stopped".
             if (engine.Phase != EnginePhase.Idle)
             {
-                clickLog?.Write("run.stop", "kind", "clicker", "reason", StopReason.Manual.ToString(), "clicks", engine.Clicks,
-                                "elapsedMs", (long)engine.SessionElapsed.TotalMilliseconds);
-                clickLog = null;
+                EndClickLog(StopReason.Manual);
                 if (commandRun == 1) FinishCommand(ExitCodes.Stopped);
             }
             engine.Stop();
@@ -1867,8 +1874,6 @@ namespace VClicker
         }
 
         // ------------------------------------------------------------------ misc
-
-        internal static int ColorRef(Color color) => color.R | (color.G << 8) | (color.B << 16);
 
         internal static bool IsElevated()
         {

@@ -17,7 +17,7 @@ namespace VClicker
         private readonly string appName;
         private readonly Macro bound;
         private readonly TextField keyField, description;
-        private readonly Label keySaved, status;
+        private readonly Label keySaved, keyLabel, status;
         private readonly LinkLabel forget;
         private readonly KeyButton generate;
         private CancellationTokenSource working;
@@ -38,9 +38,9 @@ namespace VClicker
             int width = Theme.Dp(500);
 
             var body = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, Dock = DockStyle.Fill, BackColor = Theme.Bg };
-            body.Controls.Add(Text_(Loc.F("ai.privacy", appName), Theme.Dim, width, 12));
+            body.Controls.Add(Dialogs.Paragraph(Loc.F("ai.privacy", appName), Theme.Dim, width, 12));
 
-            body.Controls.Add(Text_(Loc.T("ai.describe"), Theme.Text, width, 6));
+            body.Controls.Add(Dialogs.Paragraph(Loc.T("ai.describe"), Theme.Text, width, 6));
             description = new TextField { Size = new Size(width, Theme.Dp(104)), Margin = Theme.Pad(0, 0, 0, 4) };
             description.Box.Multiline = true;
             description.Box.AcceptsReturn = true;
@@ -48,9 +48,9 @@ namespace VClicker
             description.Box.MaxLength = 2000;
             description.Box.AccessibleName = Loc.T("ai.describe");
             body.Controls.Add(description);
-            body.Controls.Add(Text_(Loc.T("ai.example"), Theme.Dim, width, 12));
+            body.Controls.Add(Dialogs.Paragraph(Loc.T("ai.example"), Theme.Dim, width, 12));
 
-            keySaved = Text_(Loc.T("ai.keySaved"), Theme.Dim, width, 2);
+            keySaved = Dialogs.Paragraph(Loc.T("ai.keySaved"), Theme.Dim, width, 2);
             forget = new LinkLabel
             {
                 Text = Loc.T("ai.forget"), AutoSize = true, BackColor = Theme.Bg, LinkColor = Theme.Text, ActiveLinkColor = Theme.Cap,
@@ -62,17 +62,16 @@ namespace VClicker
                 saveSettings?.Invoke();
                 ShowKey();
             };
-            var keyLabel = Text_(Loc.T("ai.key"), Theme.Text, width, 6);
+            keyLabel = Dialogs.Paragraph(Loc.T("ai.key"), Theme.Text, width, 6);
             keyField = new TextField { Size = new Size(width, Theme.Dp(34)), Margin = Theme.Pad(0, 0, 0, 12) };
             keyField.Box.UseSystemPasswordChar = true;
             keyField.Box.AccessibleName = Loc.T("ai.key");
-            keyField.Tag = keyLabel;
             body.Controls.Add(keySaved);
             body.Controls.Add(forget);
             body.Controls.Add(keyLabel);
             body.Controls.Add(keyField);
 
-            status = Text_(string.Empty, Theme.Dim, width, 10);
+            status = Dialogs.Paragraph(string.Empty, Theme.Dim, width, 10);
             body.Controls.Add(status);
 
             var row = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, BackColor = Theme.Bg };
@@ -89,18 +88,12 @@ namespace VClicker
             ShowKey();
         }
 
-        private static Label Text_(string text, Color color, int width, int below) => new Label
-        {
-            Text = text, AutoSize = true, MaximumSize = new Size(width, 0), ForeColor = color, BackColor = Theme.Bg,
-            UseMnemonic = false, Margin = Theme.Pad(0, 0, 0, below)
-        };
-
         /// <summary>A saved key is never shown: only "saved" and Forget. Without one, the field to paste it.</summary>
         private void ShowKey()
         {
             bool saved = ApiKeys.Unprotect(settings.AiKey) != null;
             keySaved.Visible = forget.Visible = saved;
-            keyField.Visible = ((Control)keyField.Tag).Visible = !saved;
+            keyField.Visible = keyLabel.Visible = !saved;
         }
 
         /// <summary>The key field (tests set it).</summary>

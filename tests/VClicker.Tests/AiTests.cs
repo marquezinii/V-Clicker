@@ -51,7 +51,7 @@ namespace VClicker.Tests
 
             Test("pending point: never clicked; Run refuses it and the player stops before it", () =>
             {
-                string ini = Path.Combine(Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                string ini = StudioIni();
                 using (var studio = new MacroStudio(null, new ClickSettings(), ini))
                 {
                     Macro macro = Steps(1, new MacroStep { Kind = StepKind.Wait, DurationMs = 10 }, new MacroStep { Kind = StepKind.Click, NeedsPoint = true });
@@ -227,15 +227,14 @@ namespace VClicker.Tests
 
             Test("pending point: typing only X (or only Y) does not give it a place; both do", () =>
             {
-                string ini = Path.Combine(Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                string ini = StudioIni();
                 using (var studio = new MacroStudio(null, new ClickSettings(), ini))
                 {
                     Macro macro = Steps(1, new MacroStep { Kind = StepKind.Click, NeedsPoint = true });
                     macro.ExeName = "Game.exe";
                     studio.OpenProposal(new AiProposal { Macro = macro });
                     studio.Selected = 0;
-                    IEnumerable<Control> AllOf(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(AllOf(c)));
-                    NumberField[] xy = AllOf(studio).OfType<NumberField>().Where(f => f.Minimum == -MacroStep.MaxCoordinate).ToArray();
+                    NumberField[] xy = All(studio).OfType<NumberField>().Where(f => f.Minimum == -MacroStep.MaxCoordinate).ToArray();
                     Equal(2, xy.Length, "X and Y");
                     void Type(NumberField field, string text) { ((TextBox)field.Controls[0]).Text = text; field.Commit(); }
                     Type(xy[0], "300");
@@ -296,7 +295,7 @@ namespace VClicker.Tests
             Test("studio: a proposal opens unsaved, with the AI note, and nothing runs", () =>
             {
                 Loc.SetLanguage("en");
-                string ini = Path.Combine(Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                string ini = StudioIni();
                 using (var studio = new MacroStudio(null, new ClickSettings(), ini))
                 {
                     var proposal = new AiProposal { Macro = Steps(0, new MacroStep { Kind = StepKind.Click, NeedsPoint = true }), Note = "Stops when the window closes." };
@@ -305,9 +304,8 @@ namespace VClicker.Tests
                     True(studio.Current.Steps.Count == 1 && studio.Current.Steps[0].NeedsPoint, "the proposal");
                     True(!studio.Busy, "not running");
                     True(studio.Dirty, "unsaved: closing asks");
-                    IEnumerable<Control> AllOf(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(AllOf(c)));
-                    True(AllOf(studio).OfType<Label>().Any(l => l.Text.Contains("Stops when the window closes.")), "the note is shown");
-                    True(AllOf(studio).OfType<Label>().Any(l => l.Text == Loc.T("banner.ai")), "the review warning is shown");
+                    True(All(studio).OfType<Label>().Any(l => l.Text.Contains("Stops when the window closes.")), "the note is shown");
+                    True(All(studio).OfType<Label>().Any(l => l.Text == Loc.T("banner.ai")), "the review warning is shown");
                 }
                 Loc.SetLanguage("auto");
             });

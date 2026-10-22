@@ -30,30 +30,27 @@ namespace VClicker
         private const string MacroMark = "[macro]";
 
         /// <summary>The settings a profile carries. Hotkeys, window options, sounds and language stay global.</summary>
-        internal static readonly string[] Keys =
+        internal static readonly HashSet<string> Keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "IntervalMs", "SpeedInCps", "JitterPercent", "Button", "DoubleClick", "RepeatCount", "UseFixedPosition", "X", "Y",
             "StartDelaySeconds", "HoldMode", "LockStopOnFocusLoss"
         };
 
         public static string Folder(string settingsPath) =>
-            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(settingsPath)) ?? ".", "Profiles");
+            ClickSettings.FolderNextTo(settingsPath, "Profiles");
 
         private static string PathFor(string folder, string exe) => Path.Combine(folder, exe.Trim() + Extension);
-
-        private static Dictionary<string, string> Pairs(ClickSettings settings) =>
-            ClickSettings.ReadPairs(settings.Serialize().Where(IsProfileLine));
 
         private static bool IsProfileLine(string line)
         {
             int eq = line.IndexOf('=');
-            return eq > 0 && Keys.Contains(line.Substring(0, eq).Trim(), StringComparer.OrdinalIgnoreCase);
+            return eq > 0 && Keys.Contains(line.Substring(0, eq).Trim());
         }
 
         /// <summary>Copies the profile's fields (and only those) from one settings object to another.</summary>
         public static void CopyFields(ClickSettings from, ClickSettings to)
         {
-            to.Apply(Pairs(from));
+            to.Apply(ClickSettings.ReadPairs(from.Serialize().Where(IsProfileLine)));
             to.Validate();
         }
 
@@ -76,10 +73,7 @@ namespace VClicker
         public static List<AppProfile> List(string folder)
         {
             var found = new List<AppProfile>();
-            string[] files;
-            try { files = Directory.Exists(folder) ? Directory.GetFiles(folder, "*" + Extension) : new string[0]; }
-            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException) { return found; }
-            foreach (string file in files)
+            foreach (string file in ClickSettings.FilesIn(folder, Extension))
             {
                 AppProfile profile = Load(folder, Path.GetFileNameWithoutExtension(file));
                 if (profile != null) found.Add(profile);
@@ -93,7 +87,7 @@ namespace VClicker
             if (!ClickSettings.IsExeFileName(profile.ExeName)) return false;
             try
             {
-                WriteFile(PathFor(folder, profile.ExeName), Write(profile, Enumerable.Empty<Macro>()));
+                ClickSettings.WriteFile(PathFor(folder, profile.ExeName), Write(profile, Enumerable.Empty<Macro>()));
                 return true;
             }
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException) { return false; }
@@ -110,21 +104,12 @@ namespace VClicker
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException) { return false; }
         }
 
-        private static void WriteFile(string path, string content)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
-            string temp = path + ".tmp";
-            File.WriteAllText(temp, content, new UTF8Encoding(false));
-            if (File.Exists(path)) File.Replace(temp, path, null);
-            else File.Move(temp, path);
-        }
-
         internal static string Write(AppProfile profile, IEnumerable<Macro> macros)
         {
             var text = new StringBuilder();
             text.Append(Magic).Append('\n');
             text.Append("exe=").Append(profile.ExeName.Trim()).Append('\n');
-            text.Append("name=").Append(OneLine(profile.Name)).Append('\n');
+            text.Append("name=").Append(MacroFile.OneLine(profile.Name)).Append('\n');
             text.Append("used=").Append(profile.UsedUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture)).Append('\n');
             foreach (string line in profile.Settings.Serialize().Where(IsProfileLine)) text.Append(line).Append('\n');
             foreach (Macro macro in macros) text.Append(MacroMark).Append('\n').Append(MacroFile.Write(macro));
@@ -147,7 +132,7 @@ namespace VClicker
             if (pairs.TryGetValue("used", out string used) &&
                 DateTime.TryParse(used, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime when))
                 profile.UsedUtc = when.ToUniversalTime();
-            profile.Settings.Apply(pairs.Where(p => Keys.Contains(p.Key, StringComparer.OrdinalIgnoreCase))
+            profile.Settings.Apply(pairs.Where(p => Keys.Contains(p.Key))
                                         .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase));
             profile.Settings.Validate();
             if (macros == null || end < 0) return profile;
@@ -187,10 +172,7 @@ namespace VClicker
         public static List<Macro> AllMacros(string macroFolder)
         {
             var found = new List<Macro>();
-            string[] files;
-            try { files = Directory.Exists(macroFolder) ? Directory.GetFiles(macroFolder, "*" + MacroFile.Extension) : new string[0]; }
-            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException) { return found; }
-            foreach (string file in files.OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            foreach (string file in MacroFile.SavedFiles(macroFolder).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
             {
                 try
                 {
@@ -203,7 +185,7 @@ namespace VClicker
 
         /// <summary>Writes the profile and the app's saved macros to one file.</summary>
         public static void Export(AppProfile profile, string macroFolder, string path) =>
-            WriteFile(path, Write(profile, MacrosOf(macroFolder, profile.ExeName)));
+            ClickSettings.WriteFile(path, Write(profile, MacrosOf(macroFolder, profile.ExeName)));
 
         /// <summary>
         /// Saves imported macros as new files. One identical to a saved macro of the same name is not added again;
@@ -246,7 +228,5 @@ namespace VClicker
             string button = settings.Button == ClickButton.Right ? "button.right" : settings.Button == ClickButton.Middle ? "button.middle" : "button.left";
             return speed + " CPS · " + MacroStep.Lower(Loc.T(button));
         }
-
-        private static string OneLine(string text) => (text ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
     }
 }

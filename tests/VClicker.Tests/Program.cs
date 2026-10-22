@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 
@@ -39,6 +41,15 @@ namespace VClicker.Tests
         {
             if (!Equals(expected, actual))
                 throw new Exception(what + ": expected <" + expected + "> but was <" + actual + ">");
+        }
+
+        /// <summary>Every control under <paramref name="root"/>, depth first.</summary>
+        internal static IEnumerable<Control> All(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(All(c)));
+
+        /// <summary>A click sink that accepts every click and does nothing (the unit tests never touch the mouse).</summary>
+        internal sealed class NullSink : IClickSink
+        {
+            public bool Click(ClickButton button, bool doubleClick, Point? at) => true;
         }
 
         [STAThread]

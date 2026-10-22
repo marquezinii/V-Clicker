@@ -82,7 +82,7 @@ namespace VClicker
             var button = new KeyButton
             {
                 Text = text, Kind = kind, Margin = Theme.Pad(8, 0, 0, 0),
-                Size = new Size(Math.Max(Theme.Dp(100), TextRenderer.MeasureText(text, Theme.Ui(9.5f, true)).Width + Theme.Dp(28)), Theme.Dp(36))
+                Size = new Size(Dialogs.ButtonWidth(text), Theme.Dp(36))
             };
             button.Click += click;
             return button;

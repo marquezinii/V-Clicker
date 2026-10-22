@@ -11,13 +11,6 @@ namespace VClicker.Tests
     /// <summary>The "Support ♥" link: Ko-fi and Pix, nothing that nags.</summary>
     internal static class SupportTests
     {
-        private static IEnumerable<Control> All(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(All(c)));
-
-        private sealed class NullSink : IClickSink
-        {
-            public bool Click(ClickButton button, bool doubleClick, Point? at) => true;
-        }
-
         public static void Run()
         {
             Test("support: the footer has a Support link in both levels", () =>

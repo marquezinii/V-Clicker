@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Globalization;
 
@@ -40,9 +39,7 @@ namespace VClicker
             ["status.countdown"] = new[] { "Iniciando em {0}", "Starting in {0}" },
             ["status.clicking"] = new[] { "Clicando", "Clicking" },
             ["status.done"] = new[] { "Concluído", "Finished" },
-            ["status.released"] = new[] { "Tecla solta", "Key released" },
             ["status.blocked"] = new[] { "Bloqueado", "Blocked" },
-            ["status.paused"] = new[] { "Pausado", "Paused" },
             ["status.waiting"] = new[] { "Pausado · Aguardando {0}", "Paused · Waiting for {0}" },
             ["status.outside"] = new[] { "Pausado · ponto fora da janela", "Paused · spot outside the window" },
             ["stat.clicks"] = new[] { "CLIQUES", "CLICKS" },

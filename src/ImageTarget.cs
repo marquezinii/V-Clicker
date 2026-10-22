@@ -35,7 +35,7 @@ namespace VClicker
 
     /// <summary>
     /// Finds a small captured image in a screenshot (see docs/superpowers/specs/2026-10-23-smart-target-design.md).
-    /// A coarse pass at 1/4 resolution proposes places by normalized cross-correlation of gray levels; each place is
+    /// A coarse pass, shrunk to about 16x16, proposes places by normalized cross-correlation of gray levels; each place is
     /// then judged at full resolution in cells of 8x8 pixels: every cell must correlate, so a similar button with
     /// a different word fails, while a uniform change of brightness and contrast inside a cell (a hover highlight)
     /// does not matter. A loose check of the mean colour separates shapes in very different colours. Same scale only.
@@ -157,7 +157,7 @@ namespace VClicker
             var result = new ImageMatch();
             if (t.Detail < MinDetail || t.W > big.W || t.H > big.H) return result;
 
-            // Coarse pass: every place at 1/4 resolution, keeping local maxima above a loose score.
+            // Coarse pass: every place at the reduced resolution, keeping local maxima above a loose score.
             int factor = Math.Max(1, Math.Min(t.W, t.H) / CoarseSide);
             Gray coarseBig = Down(big, factor), coarseSmall = Down(small, factor);
             Template ct = Prepare(coarseSmall, false);

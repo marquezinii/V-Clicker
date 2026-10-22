@@ -17,7 +17,7 @@ namespace VClicker
     /// The Macro Studio window: record a task once in one app window, see it as a list of plain sentences, edit,
     /// save and repeat it. See docs/superpowers/specs/2026-10-21-macro-studio-design.md.
     /// </summary>
-    internal sealed class MacroStudio : Form
+    internal sealed partial class MacroStudio : Form
     {
         private const int CountdownMs = 3000;
         private const int UndoLimit = 100;
@@ -59,6 +59,14 @@ namespace VClicker
         private int analyzingIndex;
         private CaptureFor analyzingFor;
         private AppWindow analyzingWindow;
+
+        // The simulation is open: like the condition dialog, nothing else starts or edits the macro meanwhile.
+        private bool simulating;
+        // The condition dialog is open: F7 is swallowed, the clicker cannot start and nothing else edits the macro.
+        private bool conditionDialogOpen;
+
+        /// <summary>The local copy an unsaved macro's safety approval belongs to: new for every macro opened or created.</summary>
+        private string sessionInstance = Guid.NewGuid().ToString("N");
 
         // The status line, and what the indicator flashes after a stop.
         private string message;
@@ -129,24 +137,21 @@ namespace VClicker
 
         // ------------------------------------------------------------------ state the main window reads
 
-        /// <summary>Recording (or counting down to it) or running a macro.</summary>
+        /// <summary>
+        /// Recording (or counting down to it), running, simulating, analyzing a captured point, or the condition dialog
+        /// is open: nothing else starts or edits the macro.
+        /// </summary>
         public bool Busy => recordStartAt != 0 || recorder != null || player.Phase != MacroPhase.Idle || conditionDialogOpen || simulating || analyzing != null;
 
-        // The simulation is open: like the condition dialog, nothing else starts or edits the macro meanwhile.
-        private bool simulating;
-
-        /// <summary>The local copy an unsaved macro's safety approval belongs to: new for every macro opened or created.</summary>
-        private string sessionInstance = Guid.NewGuid().ToString("N");
-
-        // The condition dialog is open: F7 is swallowed, the clicker cannot start and nothing else edits the macro.
-        private bool conditionDialogOpen;
+        // Busy, or waiting for F7 to capture a point.
+        private bool BusyOrCapturing => Busy || captureIndex >= 0;
 
         /// <summary>What the on-screen indicator and the tray show for the Studio; null = nothing.</summary>
         public Tuple<Color, string> Indicator
         {
             get
             {
-                if (Busy || captureIndex >= 0) return Tuple.Create(StateDot(), StateText());
+                if (BusyOrCapturing) return Tuple.Create(StateDot(), StateText());
                 if (flashText != null && Stopwatch.GetTimestamp() < flashUntil) return Tuple.Create(Theme.Dim, flashText);
                 return null;
             }
@@ -167,6 +172,10 @@ namespace VClicker
 
         private AppWindow Pick(string prompt, List<AppWindow> windows) =>
             PickWindow != null ? PickWindow(prompt, windows) : WindowPicker.Pick(this, prompt, windows);
+
+        // The app's only window, or the one the user picks among several; null = cancelled.
+        private AppWindow ChooseWindow(List<AppWindow> windows) =>
+            windows.Count == 1 ? windows[0] : Pick(Loc.F("picker.which", windows[0].DisplayName), windows);
         internal bool Dirty => dirty;
 
         internal int Selected
@@ -178,7 +187,7 @@ namespace VClicker
         /// <summary>F8 / Stop, a lock or sleep of the computer, closing the window: ends whatever is going on.</summary>
         public void StopAll(MacroStopReason reason)
         {
-            if (!Busy && captureIndex < 0) return;
+            if (!BusyOrCapturing) return;
             if (recordStartAt != 0)
             {
                 recordStartAt = 0;
@@ -450,7 +459,7 @@ namespace VClicker
             apply();
         }
 
-        private KeyButton Button(string key, ButtonKind kind, EventHandler click, int width = 100)
+        private KeyButton Button(string key, ButtonKind kind, EventHandler click, int width)
         {
             var button = new KeyButton { Kind = kind, Size = Theme.Sz(width, 36), Margin = Theme.Pad(0, 0, 8, 0) };
             if (kind == ButtonKind.Chip) button.Font = Theme.Legend(9f, bold: true);
@@ -479,7 +488,7 @@ namespace VClicker
             bAi = Button("studio.ai", ButtonKind.Secondary, delegate { BuildWithAi(); }, 130);
             top.Controls.AddRange(new Control[] { macroList, bNew, bRename, bDelete, bSave, bAi });
 
-            // Second: record / run, how many times, stop. Record is a graphite key with a red lamp that lights while it records.
+            // Second: record / run, stop. Record is a graphite key with a red lamp that lights while it records.
             FlowLayoutPanel run = Bar();
             bRecord = Button("studio.record", ButtonKind.Secondary, delegate { BeginRecording(); }, 118);
             bRecord.Led = Theme.Danger;
@@ -488,6 +497,10 @@ namespace VClicker
             bStop = Button("studio.stop", ButtonKind.Secondary, delegate { StopAll(MacroStopReason.Manual); }, 94);
             bCommand = Button("studio.command", ButtonKind.Secondary, delegate { CopyCommand(); }, 150);
             bCommand.Visible = settings.DeveloperMode;
+            run.Controls.AddRange(new Control[] { bRecord, bRun, bSimulate, bStop, bCommand });
+
+            // Third: how many times, and how long at most (SafeClick: an explicit, optional duration limit).
+            FlowLayoutPanel options = Bar();
             var repeatLabel = new Label
             {
                 AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Font = Theme.Legend(9.75f),
@@ -501,10 +514,6 @@ namespace VClicker
             chkForever = new LedCheck { Margin = Theme.Pad(0, 5, 0, 0) };
             Localize(() => chkForever.Text = Loc.T("studio.forever"));
             chkForever.CheckedChanged += delegate { if (!loadingUi) SetRepeat(); };
-            run.Controls.AddRange(new Control[] { bRecord, bRun, bSimulate, bStop, bCommand });
-
-            // Third: how many times, and how long at most (SafeClick: an explicit, optional duration limit).
-            FlowLayoutPanel options = Bar();
             chkLimit = new LedCheck { Margin = Theme.Pad(28, 5, 8, 0) };
             Localize(() => chkLimit.Text = Loc.T("studio.limit"));
             chkLimit.CheckedChanged += delegate { if (!loadingUi) SetLimit(); };
@@ -1026,7 +1035,7 @@ namespace VClicker
         /// <param name="rebuildDetail">false when the change comes from the detail panel itself (it must not be rebuilt under the user).</param>
         private void Edit(Action change, bool rebuildDetail = true)
         {
-            if (Busy || captureIndex >= 0) return; // never under a pending capture (it would land on another step)
+            if (BusyOrCapturing) return; // never under a pending capture (it would land on another step)
             undo.Add(macro.Clone());
             if (undo.Count > UndoLimit) undo.RemoveAt(0);
             redo.Clear();
@@ -1082,7 +1091,7 @@ namespace VClicker
 
         private void Swap(List<Macro> from, List<Macro> to)
         {
-            if (from.Count == 0 || Busy || captureIndex >= 0) return;
+            if (from.Count == 0 || BusyOrCapturing) return;
             to.Add(macro.Clone());
             macro = from[from.Count - 1];
             from.RemoveAt(from.Count - 1);
@@ -1144,17 +1153,7 @@ namespace VClicker
 
         // ------------------------------------------------------------------ files
 
-        private IEnumerable<string> SavedMacros()
-        {
-            try
-            {
-                return Directory.Exists(folder)
-                    ? Directory.GetFiles(folder, "*" + MacroFile.Extension)
-                    : Enumerable.Empty<string>();
-            }
-            catch (IOException) { return Enumerable.Empty<string>(); }
-            catch (UnauthorizedAccessException) { return Enumerable.Empty<string>(); }
-        }
+        private string[] SavedMacros() => MacroFile.SavedFiles(folder);
 
         private string DisplayName => path == null ? Loc.T("studio.untitled") : (macro.Name.Length > 0 ? macro.Name : Path.GetFileNameWithoutExtension(path));
 
@@ -1164,10 +1163,8 @@ namespace VClicker
             public override string ToString() => Name;
         }
 
-        /// <summary>Macro files changed outside the Studio (a profile import).</summary>
-        internal void ReloadMacroList() => RefreshMacroList();
-
-        private void RefreshMacroList()
+        /// <summary>Also called when macro files change outside the Studio (a profile import).</summary>
+        internal void RefreshMacroList()
         {
             loadingUi = true;
             macroList.BeginUpdate();
@@ -1175,11 +1172,11 @@ namespace VClicker
             if (path == null) macroList.Items.Add(new Entry { Name = Loc.T("studio.untitled") });
             foreach (string file in SavedMacros().OrderBy(f => f, StringComparer.CurrentCultureIgnoreCase))
             {
-                bool current = path != null && string.Equals(Path.GetFullPath(file), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
+                bool current = path != null && MacroFile.SamePath(file, path);
                 macroList.Items.Add(new Entry { Path = file, Name = current ? DisplayName : Path.GetFileNameWithoutExtension(file) });
             }
             macroList.SelectedItem = macroList.Items.Cast<Entry>().FirstOrDefault(e =>
-                e.Path == null ? path == null : path != null && string.Equals(Path.GetFullPath(e.Path), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
+                e.Path == null ? path == null : path != null && MacroFile.SamePath(e.Path, path));
             macroList.EndUpdate();
             loadingUi = false;
         }
@@ -1187,7 +1184,7 @@ namespace VClicker
         private void OnMacroChosen(object sender, EventArgs e)
         {
             if (loadingUi || !(macroList.SelectedItem is Entry entry) || entry.Path == null) return;
-            if (path != null && string.Equals(Path.GetFullPath(entry.Path), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase)) return;
+            if (path != null && MacroFile.SamePath(entry.Path, path)) return;
             if (Busy || !ConfirmDiscard())
             {
                 RefreshMacroList();
@@ -1249,7 +1246,7 @@ namespace VClicker
                 string name = AskName(macro.Name);
                 if (name == null) return false;
                 macro.Name = name;
-                path = Path.Combine(folder, MacroFile.SafeFileName(name) + MacroFile.Extension);
+                path = MacroFile.PathFor(folder, name);
             }
             bool firstSave = !File.Exists(path);
             try
@@ -1286,8 +1283,8 @@ namespace VClicker
                 if (name == null) return null;
                 name = name.Trim();
                 if (name.Length == 0) continue;
-                string file = Path.Combine(folder, MacroFile.SafeFileName(name) + MacroFile.Extension);
-                bool same = path != null && string.Equals(Path.GetFullPath(file), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
+                string file = MacroFile.PathFor(folder, name);
+                bool same = path != null && MacroFile.SamePath(file, path);
                 if (!same && File.Exists(file))
                 {
                     Dialogs.Ask(this, Loc.T("mmsg.nameTaken"), Loc.T("ask.ok"));
@@ -1308,10 +1305,10 @@ namespace VClicker
             }
             string name = AskName(macro.Name.Length > 0 ? macro.Name : Path.GetFileNameWithoutExtension(path));
             if (name == null) return;
-            string target = Path.Combine(folder, MacroFile.SafeFileName(name) + MacroFile.Extension);
+            string target = MacroFile.PathFor(folder, name);
             try
             {
-                if (!string.Equals(Path.GetFullPath(target), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+                if (!MacroFile.SamePath(target, path))
                     File.Move(path, target);
                 path = target;
                 macro.Name = name;
@@ -1385,11 +1382,13 @@ namespace VClicker
             RefreshAll();
         }
 
+        // V-Clicker's own hotkeys: never recorded, and never pressed by a macro.
+        private Hotkey[] Hotkeys => new[] { settings.ToggleKey, settings.StopKey, settings.CaptureKey };
+
         private void StartRecorder()
         {
             recordStartAt = 0;
-            var hotkeys = new[] { settings.ToggleKey, settings.StopKey, settings.CaptureKey };
-            recorder = new MacroRecorder(recordWindow.Handle, hotkeys, AcceptInjectedInput);
+            recorder = new MacroRecorder(recordWindow.Handle, Hotkeys, AcceptInjectedInput);
             try
             {
                 recorder.Start();
@@ -1473,13 +1472,12 @@ namespace VClicker
                 return;
             }
             // Windows fires V-Clicker's hotkeys for keys a macro presses too: F8 in a macro would stop it.
-            var hotkeys = new[] { settings.ToggleKey, settings.StopKey, settings.CaptureKey };
             for (int i = 0; i < macro.Steps.Count; i++)
             {
                 MacroStep step = macro.Steps[i];
                 if (step.Kind != StepKind.Key && step.Kind != StepKind.Shortcut) continue;
                 Hotkey pressed = Hotkey.FromKeyData(step.Key);
-                if (!hotkeys.Any(h => h.Equals(pressed))) continue;
+                if (!Hotkeys.Any(h => h.Equals(pressed))) continue;
                 list.SelectedIndex = i;
                 Refuse(Loc.F("mmsg.hotkeyStep", i + 1, pressed));
                 return;
@@ -1500,7 +1498,7 @@ namespace VClicker
                 Refuse(Loc.F("mmsg.openApp", AppName));
                 return;
             }
-            AppWindow chosen = windows.Count == 1 ? windows[0] : Pick(Loc.F("picker.which", windows[0].DisplayName), windows);
+            AppWindow chosen = ChooseWindow(windows);
             if (chosen == null || !Accessible(chosen)) return;
 
             Size now;
@@ -1575,7 +1573,7 @@ namespace VClicker
             List<AppWindow> windows = macro.ExeName.Length > 0 ? ListWindows(macro.ExeName) : new List<AppWindow>();
             if (windows.Count > 0) // none open: the simulation still lists the steps and their risks
             {
-                AppWindow chosen = windows.Count == 1 ? windows[0] : Pick(Loc.F("picker.which", windows[0].DisplayName), windows);
+                AppWindow chosen = ChooseWindow(windows);
                 if (chosen == null || !Accessible(chosen)) return;
                 handle = chosen.Handle;
                 process = chosen.ProcessId;
@@ -1596,12 +1594,21 @@ namespace VClicker
             UpdateEnabled();
         }
 
+        // Writes the run's last record and closes its log; false = no run was being logged.
+        private bool EndRunLog(MacroStopReason reason)
+        {
+            RunLog log = System.Threading.Volatile.Read(ref runLog);
+            if (log == null) return false;
+            log.Write("run.stop", "kind", "macro", "reason", reason.ToString(), "iteration", player.Iteration,
+                      "step", player.StepIndex + 1, "elapsedMs", runClock?.ElapsedMilliseconds ?? 0L);
+            System.Threading.Volatile.Write(ref runLog, null);
+            return true;
+        }
+
         private void OnPlayerStopped(MacroStopReason reason)
         {
             if (player.Phase != MacroPhase.Idle) return; // a new run already started
-            System.Threading.Volatile.Read(ref runLog)?.Write("run.stop", "kind", "macro", "reason", reason.ToString(), "iteration", player.Iteration,
-                                             "step", player.StepIndex + 1, "elapsedMs", runClock?.ElapsedMilliseconds ?? 0L);
-            System.Threading.Volatile.Write(ref runLog, null);
+            EndRunLog(reason);
             string name = runWindow?.DisplayName ?? AppName;
             runWindow = null;
             shownStep = -1;
@@ -1727,7 +1734,7 @@ namespace VClicker
                 Refuse(Loc.F("mmsg.openApp", AppName));
                 return;
             }
-            AppWindow chosen = windows.Count == 1 ? windows[0] : Pick(Loc.F("picker.which", windows[0].DisplayName), windows);
+            AppWindow chosen = ChooseWindow(windows);
             if (chosen == null) return;
             if (!WindowLock.BringToFront(chosen.Handle))
             {
@@ -1886,8 +1893,8 @@ namespace VClicker
 
         private void UpdateStatus()
         {
-            bool active = Busy || captureIndex >= 0;
-            status.Dot = active ? StateDot() : messageColor == Theme.Dim ? Theme.Dim : messageColor;
+            bool active = BusyOrCapturing;
+            status.Dot = active ? StateDot() : messageColor;
             bRecord.LedLit = recorder != null && !recorder.Paused; // the red lamp is on while it records
             status.Text = active ? StateText() : Loc.T("mstatus.ready");
             Size preferred = status.GetPreferredSize(Size.Empty);
@@ -1900,13 +1907,12 @@ namespace VClicker
 
         private void UpdateEnabled()
         {
-            bool busy = Busy;
-            bool idle = !busy && captureIndex < 0;
+            bool idle = !BusyOrCapturing;
             int index = list.SelectedIndex;
             bRecord.Enabled = bRun.Enabled = idle;
             bSimulate.Enabled = idle && macro.Steps.Count > 0;
             bStop.SubLegend = settings.StopKey.ToString();
-            bStop.Enabled = busy || captureIndex >= 0;
+            bStop.Enabled = !idle;
             bNew.Enabled = bRename.Enabled = bDelete.Enabled = bSave.Enabled = bAi.Enabled = macroList.Enabled = idle;
             fRepeat.Enabled = idle && !chkForever.Checked;
             chkForever.Enabled = chkLimit.Enabled = idle;
@@ -1971,7 +1977,7 @@ namespace VClicker
             // Dark scroll bars (Windows 10 1809+; elsewhere the call changes nothing).
             Native.SetWindowTheme(list.Handle, "DarkMode_Explorer", null);
             Native.SetWindowTheme(detail.Handle, "DarkMode_Explorer", null);
-            Native.StyleTitleBar(Handle, MainForm.ColorRef(Theme.Bg), MainForm.ColorRef(Theme.Text), MainForm.ColorRef(Theme.Border));
+            Native.StyleTitleBar(Handle);
         }
 
         protected override void OnShown(EventArgs e)
@@ -1999,14 +2005,7 @@ namespace VClicker
             }
             else StopAll(MacroStopReason.Manual);
             // The player's stop is never handled once the window is gone: log it and tell the main window now.
-            RunLog log = System.Threading.Volatile.Read(ref runLog);
-            if (log != null)
-            {
-                log.Write("run.stop", "kind", "macro", "reason", MacroStopReason.Manual.ToString(), "iteration", player.Iteration,
-                          "step", player.StepIndex + 1, "elapsedMs", runClock?.ElapsedMilliseconds ?? 0L);
-                System.Threading.Volatile.Write(ref runLog, null);
-                host?.MacroRunEnded(MacroStopReason.Manual);
-            }
+            if (EndRunLog(MacroStopReason.Manual)) host?.MacroRunEnded(MacroStopReason.Manual);
             base.OnFormClosing(e);
         }
 
@@ -2020,491 +2019,6 @@ namespace VClicker
                 player.Dispose();
             }
             base.Dispose(disposing);
-        }
-
-        // ------------------------------------------------------------------ dialogs
-
-        /// <summary>
-        /// After F7 for a condition: what was found at the point, which kind to watch (the likeliest is preselected),
-        /// and the time limit.
-        /// </summary>
-        internal sealed class ConditionDialog : Form
-        {
-            public MacroStep Result;
-
-            public ConditionDialog(ConditionProbe probe, int timeoutMs)
-            {
-                Text = Loc.T("cond.title");
-                Dialogs.Style(this);
-                var kinds = new List<ConditionKind>();
-                if (probe.ElementName.Length > 0 && probe.ElementCount == 1) kinds.Add(ConditionKind.Element);
-                if (probe.Rgb.HasValue) kinds.Add(ConditionKind.Color);
-                if (probe.Dialog != null) kinds.Add(ConditionKind.Window);
-                ConditionKind preferred = kinds.Contains(ConditionKind.Element) ? ConditionKind.Element
-                                        : kinds.Contains(ConditionKind.Window) ? ConditionKind.Window : ConditionKind.Color;
-
-                var body = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, BackColor = Theme.Bg
-                };
-                Control Line(string text, Color color, int bottom = 8) => new Label
-                {
-                    Text = text, AutoSize = true, ForeColor = color, BackColor = Theme.Bg, UseMnemonic = false,
-                    MaximumSize = new Size(Theme.Dp(440), 0), Margin = Theme.Pad(0, 0, 0, bottom)
-                };
-                var ok = new KeyButton { Text = Loc.T("cond.confirm"), Kind = ButtonKind.Primary, Size = Theme.Sz(120, 36) };
-                var cancel = new KeyButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 36), Margin = Theme.Pad(0, 0, 8, 0) };
-                cancel.Click += delegate { DialogResult = DialogResult.Cancel; };
-
-                if (kinds.Count == 0)
-                {
-                    body.Controls.Add(Line(Loc.T("cond.nothing"), Theme.Warning, 16));
-                    ok.Enabled = false;
-                }
-                else
-                {
-                    body.Controls.Add(Line(Loc.T("cond.intro"), Theme.Dim));
-                    var choice = new Segmented
-                    {
-                        Items = kinds.Select(k => Loc.T("cond.kind." + k)).ToArray(), Height = Theme.Dp(36), Dock = DockStyle.Fill, Margin = Theme.Pad(0, 0, 0, 10)
-                    };
-                    choice.SelectedIndex = kinds.IndexOf(preferred);
-                    choice.Visible = kinds.Count > 1; // a single kind is already named by the line below
-                    body.Controls.Add(choice);
-                    var found = (Label)Line(string.Empty, Theme.Text, 4);
-                    found.Font = Theme.Ui(10f, true);
-                    var swatch = new Panel { Size = Theme.Sz(60, 20), Margin = Theme.Pad(0, 0, 0, 6), BorderStyle = BorderStyle.FixedSingle };
-                    var note = (Label)Line(string.Empty, Theme.Dim, 12);
-                    body.Controls.Add(found);
-                    body.Controls.Add(swatch);
-                    body.Controls.Add(note);
-                    void Show()
-                    {
-                        ConditionKind kind = kinds[Math.Max(0, choice.SelectedIndex)];
-                        swatch.Visible = kind == ConditionKind.Color;
-                        switch (kind)
-                        {
-                            case ConditionKind.Element:
-                                found.Text = Loc.F("cond.foundElement", TypeLabel(probe.ControlType), probe.ElementName);
-                                note.Text = Loc.T("cond.noteElement");
-                                break;
-                            case ConditionKind.Color:
-                                int rgb = probe.Rgb.Value;
-                                found.Text = Loc.F("cond.foundColor", rgb.ToString("X6", CultureInfo.InvariantCulture), probe.At.X, probe.At.Y);
-                                swatch.BackColor = Color.FromArgb((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
-                                note.Text = Loc.T("studio.colorInfo");
-                                break;
-                            default:
-                                found.Text = Loc.F("cond.foundWindow", probe.Dialog.Title);
-                                note.Text = Loc.T("cond.noteWindow");
-                                break;
-                        }
-                    }
-                    choice.SelectedChanged += delegate { Show(); };
-                    Show();
-                    foreach (ConditionKind missing in new[] { ConditionKind.Element, ConditionKind.Color, ConditionKind.Window })
-                        if (!kinds.Contains(missing)) body.Controls.Add(Line(MissingText(missing, probe), Theme.Dim, 4));
-
-                    var limitRow = new FlowLayoutPanel { AutoSize = true, BackColor = Theme.Bg, Margin = Theme.Pad(0, 10, 0, 0), WrapContents = false };
-                    limitRow.Controls.Add(new Label
-                    {
-                        Text = Loc.T("studio.timeout"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Margin = Theme.Pad(0, 10, 10, 0)
-                    });
-                    var limit = new NumberField
-                    {
-                        Minimum = MacroStep.MinTimeoutMs / 1000, Maximum = MacroStep.MaxTimeoutMs / 1000, Size = Theme.Sz(90, 36), Unit = "s"
-                    };
-                    limit.Number = timeoutMs / 1000;
-                    limitRow.Controls.Add(limit);
-                    body.Controls.Add(limitRow);
-
-                    ok.Click += delegate
-                    {
-                        limit.Commit();
-                        ConditionKind kind = kinds[Math.Max(0, choice.SelectedIndex)];
-                        Result = new MacroStep
-                        {
-                            Kind = StepKind.WaitFor, Condition = kind, DurationMs = limit.Value * 1000,
-                            At = kind == ConditionKind.Window ? Point.Empty : probe.At,
-                            Window = kind == ConditionKind.Window ? probe.Dialog?.Clone() : probe.Window?.Clone(),
-                            ControlType = kind == ConditionKind.Element ? probe.ControlType : string.Empty,
-                            Text = kind == ConditionKind.Element ? probe.ElementName : string.Empty,
-                            AutomationId = kind == ConditionKind.Element ? probe.AutomationId : string.Empty,
-                            Rgb = kind == ConditionKind.Color ? probe.Rgb.Value : 0
-                        };
-                        DialogResult = DialogResult.OK;
-                    };
-                }
-                var buttons = new FlowLayoutPanel
-                {
-                    FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, BackColor = Theme.Bg, Margin = Theme.Pad(0, 16, 0, 0)
-                };
-                buttons.Controls.Add(ok);
-                buttons.Controls.Add(cancel);
-                body.Controls.Add(buttons);
-                Controls.Add(body);
-                KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) DialogResult = DialogResult.Cancel; };
-            }
-
-            /// <summary>"Botão" for "Button": the control types a person recognizes, in their language.</summary>
-            internal static string TypeLabel(string type) => Loc.ControlTypeLabel(type);
-
-            /// <summary>Why a kind of condition is not offered at this point.</summary>
-            private static string MissingText(ConditionKind kind, ConditionProbe probe)
-            {
-                if (kind == ConditionKind.Element && probe.ElementName.Length > 0)
-                    return probe.ElementCount > 1
-                        ? Loc.F("cond.missing.ElementMany", probe.ElementCount, MacroStep.Lower(TypeLabel(probe.ControlType)), probe.ElementName)
-                        : Loc.T("cond.missing.ElementUnconfirmed");
-                return Loc.T("cond.missing." + kind);
-            }
-        }
-
-        /// <summary>
-        /// "Smart target": how the V-Clicker will recognize what to click, in plain words, with a preview. By name
-        /// (UI Automation) when the point has a named element that is unique in the window; else by appearance (the
-        /// smallest image region that is unique). The other way stays one click away; Confirm only for a unique one.
-        /// </summary>
-        internal sealed class TargetDialog : Form
-        {
-            public SmartTarget Result;
-
-            public TargetDialog(TargetProbe probe, int timeoutMs)
-            {
-                Text = Loc.T("target.title");
-                Dialogs.Style(this);
-                var body = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, BackColor = Theme.Bg
-                };
-                Label Line(string text, Color color, int bottom = 8) => new Label
-                {
-                    Text = text, AutoSize = true, ForeColor = color, BackColor = Theme.Bg, UseMnemonic = false,
-                    MaximumSize = new Size(Theme.Dp(440), 0), Margin = Theme.Pad(0, 0, 0, bottom)
-                };
-                var ok = new KeyButton { Text = Loc.T("cond.confirm"), Kind = ButtonKind.Primary, Size = Theme.Sz(120, 36) };
-                var cancel = new KeyButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 36), Margin = Theme.Pad(0, 0, 8, 0) };
-                cancel.Click += delegate { DialogResult = DialogResult.Cancel; };
-
-                bool byName = probe.ElementUsable;
-                List<ImageOption> sizes = probe.Images.Where(o => o.Crop != null).ToList();
-                ImageOption image = probe.FirstImage;
-                bool byLook = image != null;
-                var missing = new List<string>();
-                if (!byName) missing.Add(NameMissing(probe));
-                if (!byLook) missing.Add(Loc.T("target.missing.image"));
-
-                if (!byName && !byLook)
-                {
-                    body.Controls.Add(Line(Loc.T("target.nothing"), Theme.Warning, 12));
-                    ok.Enabled = false;
-                }
-                else
-                {
-                    var choice = new Segmented { Items = new[] { Loc.T("target.byName"), Loc.T("target.byLook") }, Height = Theme.Dp(36), Dock = DockStyle.Fill, Margin = Theme.Pad(0, 0, 0, 10) };
-                    choice.SelectedIndex = byName ? 0 : 1;
-                    var found = Line(string.Empty, Theme.Text, 6);
-                    found.Font = Theme.Ui(10f, true);
-                    var view = new PixelView { Height = Theme.Dp(110), Dock = DockStyle.Fill, Margin = Theme.Pad(0, 0, 0, 8), BackColor = Theme.Field };
-                    var verdict = Line(string.Empty, Theme.Success, 6);
-                    // Label, then the size keys out to the dialog's right edge (the same edge as the preview and the keys).
-                    var sizeRow = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Dock = DockStyle.Fill, BackColor = Theme.Bg, Margin = Theme.Pad(0, 0, 0, 6) };
-                    sizeRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-                    sizeRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-                    sizeRow.Controls.Add(new Label
-                    {
-                        Text = Loc.T("target.size"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Anchor = AnchorStyles.Left, Margin = Theme.Pad(0, 0, 10, 0)
-                    });
-                    var size = new Segmented
-                    {
-                        Items = sizes.Select(o => Loc.T("target.side" + o.Side)).ToArray(), Height = Theme.Dp(36), Dock = DockStyle.Fill, Margin = Padding.Empty
-                    };
-                    if (image != null) size.SelectedIndex = sizes.IndexOf(image);
-                    sizeRow.Controls.Add(size);
-                    var note = Line(string.Empty, Theme.Dim, 8);
-                    body.Controls.Add(Line(Loc.T("target.intro"), Theme.Dim));
-                    body.Controls.Add(found);
-                    body.Controls.Add(view);
-                    body.Controls.Add(verdict);
-                    body.Controls.Add(sizeRow);
-                    body.Controls.Add(note);
-                    if (byName && byLook)
-                    {
-                        body.Controls.Add(Line(Loc.T("target.how"), Theme.Dim, 4));
-                        body.Controls.Add(choice);
-                    }
-
-                    void Show()
-                    {
-                        bool element = byName && choice.SelectedIndex == 0;
-                        sizeRow.Visible = !element;
-                        if (element)
-                        {
-                            found.Text = Loc.F("target.foundElement", ConditionDialog.TypeLabel(probe.Element.ControlType), probe.Element.Name);
-                            view.Image = probe.ElementPreview;
-                            verdict.Text = Loc.T("target.unique");
-                            verdict.ForeColor = Theme.Success;
-                            note.Text = Loc.T("target.elementNote");
-                            ok.Enabled = true;
-                            return;
-                        }
-                        found.Text = Loc.T("target.foundImage");
-                        view.Image = image?.Crop;
-                        verdict.Text = image == null ? string.Empty
-                            : image.Problem == ImageProblem.None ? Loc.T("target.unique") : Loc.F("target.image." + image.Problem, image.Count);
-                        verdict.ForeColor = image?.Problem == ImageProblem.None ? Theme.Success : Theme.Warning;
-                        note.Text = Loc.T("target.imageNote");
-                        ok.Enabled = image?.Problem == ImageProblem.None;
-                    }
-                    choice.SelectedChanged += delegate { Show(); };
-                    size.SelectedChanged += delegate
-                    {
-                        if (size.SelectedIndex >= 0 && size.SelectedIndex < sizes.Count) image = sizes[size.SelectedIndex];
-                        Show();
-                    };
-                    Show();
-                    foreach (string why in missing) body.Controls.Add(Line(why, Theme.Dim, 4));
-                    missing.Clear();
-
-                    var limitRow = new FlowLayoutPanel { AutoSize = true, BackColor = Theme.Bg, Margin = Theme.Pad(0, 10, 0, 0), WrapContents = false };
-                    limitRow.Controls.Add(new Label
-                    {
-                        Text = Loc.T("studio.findTimeout"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, Margin = Theme.Pad(0, 10, 10, 0)
-                    });
-                    var limit = new NumberField
-                    {
-                        Minimum = MacroStep.MinTimeoutMs / 1000, Maximum = MacroStep.MaxTimeoutMs / 1000, Size = Theme.Sz(90, 36), Unit = "s"
-                    };
-                    limit.Number = timeoutMs / 1000;
-                    limitRow.Controls.Add(limit);
-                    body.Controls.Add(limitRow);
-
-                    ok.Click += delegate
-                    {
-                        limit.Commit();
-                        if (byName && choice.SelectedIndex == 0)
-                            Result = new SmartTarget
-                            {
-                                Kind = TargetKind.Element, ControlType = probe.Element.ControlType, Name = probe.Element.Name,
-                                AutomationId = probe.Element.AutomationId, TimeoutMs = limit.Value * 1000
-                            };
-                        else if (image != null && image.Problem == ImageProblem.None)
-                            Result = new SmartTarget { Kind = TargetKind.Image, Png = SmartTarget.EncodeImage(image.Crop), TimeoutMs = limit.Value * 1000 };
-                        else return;
-                        DialogResult = DialogResult.OK;
-                    };
-                }
-                foreach (string why in missing) body.Controls.Add(Line(why, Theme.Dim, 4));
-                var buttons = new FlowLayoutPanel
-                {
-                    FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, BackColor = Theme.Bg, Margin = Theme.Pad(0, 16, 0, 0)
-                };
-                buttons.Controls.Add(ok);
-                buttons.Controls.Add(cancel);
-                body.Controls.Add(buttons);
-                Controls.Add(body);
-                KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) DialogResult = DialogResult.Cancel; };
-            }
-
-            /// <summary>Why the element at the point cannot be the target.</summary>
-            private static string NameMissing(TargetProbe probe)
-            {
-                ElementProbe element = probe.Element;
-                if (element == null || element.Name.Length == 0) return Loc.T("target.missing.none");
-                return element.Count > 1
-                    ? Loc.F("target.missing.many", element.Count, MacroStep.Lower(ConditionDialog.TypeLabel(element.ControlType)), element.Name)
-                    : Loc.T("target.missing.unconfirmed");
-            }
-        }
-
-        /// <summary>A bitmap scaled to fit, pixels kept sharp when enlarged (a captured region is small). Does not own the bitmap.</summary>
-        internal sealed class PixelView : Control
-        {
-            private Bitmap image;
-
-            public PixelView()
-            {
-                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
-            }
-
-            public Bitmap Image
-            {
-                get => image;
-                set
-                {
-                    image = value;
-                    Invalidate();
-                }
-            }
-
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                base.OnPaint(e);
-                if (image == null) return;
-                float scale = Math.Min((float)Width / image.Width, (float)Height / image.Height);
-                if (scale > 1) scale = (float)Math.Floor(scale); // whole multiples keep every pixel square
-                var size = new SizeF(image.Width * scale, image.Height * scale);
-                e.Graphics.InterpolationMode = scale >= 1 ? InterpolationMode.NearestNeighbor : InterpolationMode.HighQualityBicubic;
-                e.Graphics.PixelOffsetMode = PixelOffsetMode.Half;
-                e.Graphics.DrawImage(image, new RectangleF((Width - size.Width) / 2, (Height - size.Height) / 2, size.Width, size.Height));
-            }
-        }
-
-        /// <summary>The pause optimization: long waits, each with a tick (all off) and a new value (1 s).</summary>
-        private sealed class PauseOptimizer : Form
-        {
-            public readonly Dictionary<int, int> Result = new Dictionary<int, int>();
-
-            public PauseOptimizer(Macro macro, List<int> waits)
-            {
-                Text = Loc.T("opt.title");
-                Dialogs.Style(this);
-                var body = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2,
-                    BackColor = Theme.Bg
-                };
-                body.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-                body.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-                var intro = new Label
-                {
-                    Text = Loc.T("opt.intro"), AutoSize = true, ForeColor = Theme.Dim, BackColor = Theme.Bg, UseMnemonic = false,
-                    MaximumSize = new Size(Theme.Dp(440), 0), Margin = Theme.Pad(0, 0, 0, 12)
-                };
-                body.Controls.Add(intro);
-                body.SetColumnSpan(intro, 2);
-                var rows = new List<Tuple<int, LedCheck, NumberField>>();
-                foreach (int index in waits)
-                {
-                    var check = new LedCheck
-                    {
-                        Text = Loc.F("opt.row", index + 1, MacroStep.Seconds(macro.Steps[index].DurationMs)),
-                        BackColor = Theme.Bg, Margin = Theme.Pad(0, 4, 16, 6)
-                    };
-                    var value = new NumberField { Minimum = 0, Maximum = MacroStep.MaxWaitMs / 1000, Decimals = 1, Size = Theme.Sz(90, 36), Unit = "s" };
-                    value.Number = 1;
-                    value.Enabled = false;
-                    check.CheckedChanged += delegate { value.Enabled = check.Checked; };
-                    body.Controls.Add(check);
-                    body.Controls.Add(value);
-                    rows.Add(Tuple.Create(index, check, value));
-                }
-                var buttons = new FlowLayoutPanel
-                {
-                    FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, BackColor = Theme.Bg,
-                    Margin = Theme.Pad(0, 14, 0, 0)
-                };
-                var apply = new KeyButton { Text = Loc.T("opt.apply"), Kind = ButtonKind.Primary, Size = Theme.Sz(110, 36) };
-                var cancel = new KeyButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 36), Margin = Theme.Pad(0, 0, 8, 0) };
-                apply.Click += delegate
-                {
-                    foreach (Tuple<int, LedCheck, NumberField> row in rows)
-                        if (row.Item2.Checked) Result[row.Item1] = (int)Math.Round(row.Item3.Number * 1000);
-                    DialogResult = DialogResult.OK;
-                };
-                cancel.Click += delegate { DialogResult = DialogResult.Cancel; };
-                buttons.Controls.Add(apply);
-                buttons.Controls.Add(cancel);
-                body.Controls.Add(buttons);
-                body.SetColumnSpan(buttons, 2);
-                Controls.Add(body);
-            }
-        }
-    }
-
-    /// <summary>Small dark question and text dialogs (the stock MessageBox ignores the theme).</summary>
-    internal static class Dialogs
-    {
-        internal static void Style(Form form)
-        {
-            form.FormBorderStyle = FormBorderStyle.FixedDialog;
-            form.MaximizeBox = form.MinimizeBox = false;
-            form.ShowInTaskbar = false;
-            form.StartPosition = FormStartPosition.CenterParent;
-            form.AutoScaleMode = AutoScaleMode.None;
-            form.AutoSize = true;
-            form.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            form.BackColor = Theme.Bg;
-            form.ForeColor = Theme.Text;
-            form.Font = Theme.Ui(9.5f);
-            form.Padding = Theme.Pad(18);
-            form.KeyPreview = true;
-            form.HandleCreated += delegate
-            {
-                Native.StyleTitleBar(form.Handle, MainForm.ColorRef(Theme.Bg), MainForm.ColorRef(Theme.Text), MainForm.ColorRef(Theme.Border));
-            };
-        }
-
-        /// <returns>The index of the button pressed; -1 if the dialog was closed (or Esc).</returns>
-        public static int Ask(IWin32Window owner, string text, params string[] buttons) => Ask(owner, text, ButtonKind.Primary, buttons);
-
-        /// <param name="first">The first button's key: the coral one when it destroys something.</param>
-        public static int Ask(IWin32Window owner, string text, ButtonKind first, params string[] buttons)
-        {
-            using (var form = new Form { Text = "V-Clicker" })
-            {
-                Style(form);
-                int answer = -1;
-                var body = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, Dock = DockStyle.Fill, BackColor = Theme.Bg };
-                body.Controls.Add(new Label
-                {
-                    Text = text, AutoSize = true, MaximumSize = new Size(Theme.Dp(440), 0), BackColor = Theme.Bg, ForeColor = Theme.Text,
-                    UseMnemonic = false, Margin = Theme.Pad(0, 0, 0, 16)
-                });
-                var row = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, BackColor = Theme.Bg };
-                for (int i = 0; i < buttons.Length; i++)
-                {
-                    int index = i;
-                    var button = new KeyButton
-                    {
-                        Text = buttons[i], Kind = i == 0 ? first : ButtonKind.Secondary,
-                        Size = new Size(Math.Max(Theme.Dp(100), TextRenderer.MeasureText(buttons[i], Theme.Ui(9.5f, true)).Width + Theme.Dp(28)), Theme.Dp(32)),
-                        Margin = Theme.Pad(8, 0, 0, 0)
-                    };
-                    button.Click += delegate { answer = index; form.Close(); };
-                    row.Controls.Add(button);
-                }
-                body.Controls.Add(row);
-                form.Controls.Add(body);
-                form.KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) form.Close(); };
-                form.ShowDialog(owner);
-                return answer;
-            }
-        }
-
-        /// <returns>The text typed; null if cancelled.</returns>
-        public static string Prompt(IWin32Window owner, string label, string initial)
-        {
-            using (var form = new Form { Text = "V-Clicker" })
-            {
-                Style(form);
-                string result = null;
-                var body = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, Dock = DockStyle.Fill, BackColor = Theme.Bg };
-                body.Controls.Add(new Label { Text = label, AutoSize = true, BackColor = Theme.Bg, ForeColor = Theme.Dim, UseMnemonic = false });
-                var field = new TextField { Width = Theme.Dp(360), Margin = Theme.Pad(0, 8, 0, 18) };
-                TextBox box = field.Box;
-                box.Text = initial ?? string.Empty;
-                box.MaxLength = 80;
-                box.AccessibleName = label;
-                body.Controls.Add(field);
-                var row = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, BackColor = Theme.Bg };
-                var ok = new KeyButton { Text = Loc.T("ask.ok"), Kind = ButtonKind.Primary, Size = Theme.Sz(100, 36), Margin = Theme.Pad(8, 0, 0, 0) };
-                var cancel = new KeyButton { Text = Loc.T("ask.cancel"), Kind = ButtonKind.Secondary, Size = Theme.Sz(100, 36), Margin = Theme.Pad(8, 0, 0, 0) };
-                ok.Click += delegate { result = box.Text; form.Close(); };
-                cancel.Click += delegate { form.Close(); };
-                row.Controls.Add(ok);
-                row.Controls.Add(cancel);
-                body.Controls.Add(row);
-                form.Controls.Add(body);
-                form.KeyDown += (s, e) =>
-                {
-                    if (e.KeyCode == Keys.Escape) form.Close();
-                    if (e.KeyCode == Keys.Enter) { result = box.Text; form.Close(); e.SuppressKeyPress = true; }
-                };
-                form.Shown += delegate { box.SelectAll(); box.Focus(); };
-                form.ShowDialog(owner);
-                return result;
-            }
         }
     }
 }

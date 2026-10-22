@@ -94,7 +94,6 @@ namespace VClicker
         /// <summary>The final check right before a click (one hit test, or one small screenshot).</summary>
         public const int ConfirmTimeoutMs = 1000;
         private const int CoverGrid = 16;
-        private const int Half = 2;
 
         /// <summary>One look for the step's target, right now (on the player thread).</summary>
         public static TargetLook Find(IntPtr bound, uint process, MacroStep step, CancellationToken cancel)
@@ -138,9 +137,7 @@ namespace VClicker
             if (!MacroTarget.Owns(bound, WindowLock.Foreground())) return ConditionRead.Away;
             IntPtr anchor = MacroTarget.FindAnchor(bound, step.Window);
             if (anchor == IntPtr.Zero) return ConditionRead.NotYet;
-            var area = new Rectangle(look.Screen.X - Half, look.Screen.Y - Half, 2 * Half + 1, 2 * Half + 1);
-            if (!WindowLock.ClientArea(anchor).Contains(area)) return ConditionRead.NotYet;
-            ConditionRead cover = MacroConditions.Cover(anchor, process, area);
+            ConditionRead cover = MacroConditions.CoverAround(anchor, process, look.Screen);
             if (cover != ConditionRead.Met) return cover;
             SmartTarget target = step.Target;
             bool there = MacroConditions.WithTimeout(
@@ -171,12 +168,15 @@ namespace VClicker
             else
             {
                 look.Status = TargetStatus.Found;
-                look.Bounds = Rectangle.FromLTRB((int)Math.Round(rect.Left), (int)Math.Round(rect.Top), (int)Math.Round(rect.Right), (int)Math.Round(rect.Bottom));
+                look.Bounds = ToRectangle(rect);
                 look.Screen = new Point(look.Bounds.X + look.Bounds.Width / 2, look.Bounds.Y + look.Bounds.Height / 2);
                 look.Element = matches[0];
             }
             return look;
         }
+
+        private static Rectangle ToRectangle(System.Windows.Rect rect) =>
+            Rectangle.FromLTRB((int)Math.Round(rect.Left), (int)Math.Round(rect.Top), (int)Math.Round(rect.Right), (int)Math.Round(rect.Bottom));
 
         /// <summary>
         /// The elements of the window's UI Automation tree with this type and name (and id, when given). Not filtered
@@ -235,7 +235,7 @@ namespace VClicker
                 var probe = new ElementProbe { ControlType = MacroConditions.TypeName(info.ControlType), Name = MacroConditions.Normalize(info.Name) };
                 System.Windows.Rect rect = info.BoundingRectangle;
                 if (!rect.IsEmpty)
-                    probe.Bounds = Rectangle.FromLTRB((int)Math.Round(rect.Left), (int)Math.Round(rect.Top), (int)Math.Round(rect.Right), (int)Math.Round(rect.Bottom));
+                    probe.Bounds = ToRectangle(rect);
                 List<AutomationElement> same = Matches(anchor, probe.ControlType, probe.Name, string.Empty);
                 for (int attempt = 1; attempt < ProbeTries && same.Count == 0; attempt++)
                 {

@@ -25,7 +25,6 @@ namespace VClicker
         private const uint INPUT_KEYBOARD = 1;
         private const uint KEYEVENTF_EXTENDEDKEY = 0x1, KEYEVENTF_KEYUP = 0x2, KEYEVENTF_UNICODE = 0x4;
         private const uint MOUSEEVENTF_WHEEL = 0x0800;
-        private static readonly int InputSize = Marshal.SizeOf(typeof(Native.INPUT));
 
         [DllImport("user32.dll")]
         private static extern uint MapVirtualKey(uint code, uint mapType);
@@ -63,10 +62,10 @@ namespace VClicker
             press.u.ki.dwFlags = KEYEVENTF_UNICODE;
             Native.INPUT release = press;
             release.u.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
-            return Native.SendInput(2, new[] { press, release }, InputSize) == 2;
+            return Native.SendInput(press, release);
         }
 
-        private static bool Send(Native.INPUT input) => Native.SendInput(1, new[] { input }, InputSize) == 1;
+        private static bool Send(Native.INPUT input) => Native.SendInput(input);
     }
 
     internal enum MacroStopReason
@@ -175,7 +174,7 @@ namespace VClicker
         public const int StillPx = 2;
 
         /// <summary>How long the current condition has been watched (pauses excluded).</summary>
-        public TimeSpan Watched => TimeSpan.FromSeconds((double)Interlocked.Read(ref watchedTicks) / Stopwatch.Frequency);
+        public TimeSpan Watched => ClickEngine.Span(Interlocked.Read(ref watchedTicks));
 
         public TimeSpan CountdownRemaining
         {
@@ -183,7 +182,7 @@ namespace VClicker
             {
                 if (Phase != MacroPhase.Countdown) return TimeSpan.Zero;
                 long ticks = Interlocked.Read(ref countdownEnd) - Stopwatch.GetTimestamp();
-                return ticks <= 0 ? TimeSpan.Zero : TimeSpan.FromSeconds((double)ticks / Stopwatch.Frequency);
+                return ticks <= 0 ? TimeSpan.Zero : ClickEngine.Span(ticks);
             }
         }
 

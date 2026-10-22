@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -64,7 +65,7 @@ namespace VClicker
         private bool hasLastMouse;
         private RecordedEvent lastMouse; // where the latest mouse action happened (a hover there adds nothing)
 
-        private bool restValid;         // the cursor is resting at restAt (in the target, moved since the last action)
+        private bool restValid;         // the cursor is resting at rest (in the target, moved since the last action)
         private RecordedEvent rest;
         private bool hoverPending;
         private RecordedEvent hover;
@@ -234,7 +235,7 @@ namespace VClicker
             int gap = Elapsed(lastEnd, e.Time);
             if (last != null && last.Kind == step.Kind)
             {
-                if ((step.Kind == StepKind.Type && gap < TypingBreakMs) || (step.Kind == StepKind.Password && gap < TypingBreakMs))
+                if ((step.Kind == StepKind.Type || step.Kind == StepKind.Password) && gap < TypingBreakMs)
                 {
                     if (step.Kind == StepKind.Type) last.Text += step.Text;
                     EndAction(e.Time);
@@ -679,8 +680,7 @@ namespace VClicker
                 return both;
             }
             string text = count > 0 ? buffer.ToString(0, Math.Min(count, buffer.Length)) : string.Empty;
-            foreach (char c in text)
-                if (char.IsControl(c)) text = string.Empty;
+            if (text.Any(char.IsControl)) text = string.Empty;
             if (pendingDead != '\0')
             {
                 char dead = pendingDead;

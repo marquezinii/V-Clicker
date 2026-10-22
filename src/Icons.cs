@@ -17,8 +17,6 @@ namespace VClicker
     /// </summary>
     internal static class Icons
     {
-        public static Glyph ForCorner(HudCorner corner) => Glyph.CornerTopLeft + (int)corner;
-
         public static void Draw(Graphics g, Glyph glyph, RectangleF box, Color color)
         {
             if (glyph == Glyph.None) return;

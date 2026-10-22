@@ -187,8 +187,7 @@ namespace VClicker
                     return result;
                 }
                 // ponytail: WindowFromPoint may wait on a hung target; the run then stalls until it answers or F8.
-                if (Root(WindowFromPoint(new Native.POINT { X = screen.X, Y = screen.Y })) != anchor ||
-                    (drag && Root(WindowFromPoint(new Native.POINT { X = end.X, Y = end.Y })) != anchor))
+                if (RootAt(screen) != anchor || (drag && RootAt(end) != anchor))
                 {
                     result.Status = MacroCheck.Covered;
                     return result;

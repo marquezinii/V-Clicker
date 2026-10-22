@@ -13,11 +13,6 @@ namespace VClicker.Tests
     /// </summary>
     internal static class Screenshot
     {
-        private sealed class NullSink : IClickSink
-        {
-            public bool Click(ClickButton button, bool doubleClick, Point? at) => true;
-        }
-
         public static int Take(string output, string[] options)
         {
             string language = Array.IndexOf(options, "en") >= 0 ? "en" : "pt";
@@ -35,7 +30,7 @@ namespace VClicker.Tests
             try
             {
                 new ClickSettings { Language = language, StartDelaySeconds = 0, Sounds = false, IntervalMs = 100, Advanced = Array.IndexOf(options, "simple") < 0 }.Save(ini);
-                using (var form = new MainForm(ini, new NullSink()))
+                using (var form = new MainForm(ini, new Program.NullSink()))
                 {
                     form.StartPosition = FormStartPosition.Manual;
                     form.Location = new Point(60, 40);

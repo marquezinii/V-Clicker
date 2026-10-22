@@ -10,6 +10,10 @@ namespace VClicker.Tests
 {
     internal static partial class MacroTests
     {
+        // A settings file in a fresh temporary folder: the Studio's Macros folder goes next to it.
+        private static string StudioIni() =>
+            Path.Combine(Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+
         public static void Run()
         {
             FileTests();
@@ -132,7 +136,7 @@ namespace VClicker.Tests
 
             Test("conditions in the studio: a wait becomes a condition and back exactly, even after saving", () =>
             {
-                string ini = Path.Combine(Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                string ini = StudioIni();
                 using (var studio = new MacroStudio(null, new ClickSettings(), ini))
                 {
                     Macro macro = Steps(1, new MacroStep { Kind = StepKind.Click, At = new Point(1, 1) },
@@ -201,7 +205,7 @@ namespace VClicker.Tests
         {
             Test("studio: builds empty and with a macro, and fits a small screen", () =>
             {
-                string ini = Path.Combine(Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                string ini = StudioIni();
                 using (var studio = new MacroStudio(null, new ClickSettings(), ini))
                 {
                     Equal(0, studio.Current.Steps.Count, "starts with an empty macro when none is saved");
@@ -222,7 +226,7 @@ namespace VClicker.Tests
 
             Test("studio: edits, pause optimization and restore can all be undone", () =>
             {
-                string ini = Path.Combine(Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                string ini = StudioIni();
                 using (var studio = new MacroStudio(null, new ClickSettings(), ini))
                 {
                     Macro macro = Steps(1,

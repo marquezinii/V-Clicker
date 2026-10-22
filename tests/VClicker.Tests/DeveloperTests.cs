@@ -11,11 +11,6 @@ namespace VClicker.Tests
     /// <summary>Developer Mode (docs/superpowers/specs/2026-10-21-developer-mode-design.md).</summary>
     internal static partial class MacroTests
     {
-        private sealed class NullClickSink : IClickSink
-        {
-            public bool Click(ClickButton button, bool doubleClick, Point? at) => true;
-        }
-
         private static void DeveloperTests()
         {
             Test("command line: macro, variables, log and exit", () =>
@@ -120,7 +115,7 @@ namespace VClicker.Tests
                 {
                     new ClickSettings { DeveloperMode = true, StartDelaySeconds = 0, Sounds = false, RepeatCount = 3, IntervalMs = 10 }.Save(ini);
                     True(ClickSettings.Load(ini).DeveloperMode, "saved");
-                    using (var form = new MainForm(ini, new NullClickSink()) { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
+                    using (var form = new MainForm(ini, new NullSink()) { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
                     {
                         IntPtr handle = form.Handle;
                         form.Toggle(false);
@@ -153,7 +148,7 @@ namespace VClicker.Tests
                 try
                 {
                     new ClickSettings { StartDelaySeconds = 0, Sounds = false, RepeatCount = 2, IntervalMs = 10 }.Save(ini);
-                    using (var form = new MainForm(ini, new NullClickSink()) { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
+                    using (var form = new MainForm(ini, new NullSink()) { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
                     {
                         IntPtr handle = form.Handle;
                         Equal(ExitCodes.BadArguments, form.RunCommand(CommandLine.Parse(new[] { "--macro", "Nope", "--log", log })), "failed");
@@ -189,7 +184,7 @@ namespace VClicker.Tests
                     var held = new AppProfile { ExeName = "Game.exe", Name = "Game", UsedUtc = DateTime.UtcNow };
                     held.Settings.HoldMode = true;
                     Profiles.Save(Profiles.Folder(ini), held);
-                    using (var form = new MainForm(ini, new NullClickSink()) { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
+                    using (var form = new MainForm(ini, new NullSink()) { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
                     {
                         IntPtr handle = form.Handle;
                         Equal(ExitCodes.BadArguments, form.RunCommand(CommandLine.Parse(new[] { "--profile", "Game" })), "refused");
@@ -211,7 +206,7 @@ namespace VClicker.Tests
                     macro.ExeName = "app.exe";
                     macro.Name = "Hello";
                     MacroFile.Save(macro, Path.Combine(MacroFile.Folder(ini), "Hello.vcmacro"));
-                    using (var form = new MainForm(ini, new NullClickSink()) { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
+                    using (var form = new MainForm(ini, new NullSink()) { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
                     {
                         IntPtr handle = form.Handle;
                         Equal(ExitCodes.BadArguments, form.RunCommand(CommandLine.Parse(new[] { "--macro", "Nope" })), "no such macro");
