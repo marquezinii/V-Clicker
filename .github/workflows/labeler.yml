@@ -1,0 +1,22 @@
+name: Label PRs
+
+# Labels every pull request by the paths it touches (.github/labeler.yml); the release notes are grouped by these
+# labels (.github/release.yml). pull_request_target reads the configuration from main, so forks cannot change it.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    name: Label by path
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          sync-labels: true

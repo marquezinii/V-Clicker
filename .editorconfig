@@ -13,3 +13,34 @@ indent_size = 2
 
 [*.md]
 trim_trailing_whitespace = false
+
+[*.cs]
+# Object and anonymous-type initializers may list several members on one line, and a case block's braces sit at the
+# case label's indentation: the code base does both on purpose, and `dotnet format` (build.ps1 -Lint) honours it.
+csharp_new_line_before_members_in_object_initializers = false
+csharp_new_line_before_members_in_anonymous_types = false
+csharp_indent_case_contents_when_block = false
+
+# The .NET analyzers run at the "recommended" level (Directory.Build.props) and every warning is a build error.
+# The rules below are the ones the code did not meet when that gate was introduced (2026-10-22); they stay visible
+# in the IDE as suggestions. To ratchet one up, fix its findings and delete its line here.
+# CA1305: IFormatProvider in Parse / ToString
+dotnet_diagnostic.CA1305.severity = suggestion
+# CA1310: StringComparison in StartsWith / IndexOf
+dotnet_diagnostic.CA1310.severity = suggestion
+# CA1806: a method's result is ignored (new Foo() as a statement)
+dotnet_diagnostic.CA1806.severity = suggestion
+# CA1822: members that could be static
+dotnet_diagnostic.CA1822.severity = suggestion
+# CA1825: Array.Empty<T>() instead of new T[0]
+dotnet_diagnostic.CA1825.severity = suggestion
+# CA1838: StringBuilder parameters in P/Invoke signatures
+dotnet_diagnostic.CA1838.severity = suggestion
+# CA1859: concrete types instead of interfaces for performance
+dotnet_diagnostic.CA1859.severity = suggestion
+# CA1861: constant arrays passed as arguments
+dotnet_diagnostic.CA1861.severity = suggestion
+# CA2201: reserved exception types (the test runner throws plain Exception)
+dotnet_diagnostic.CA2201.severity = suggestion
+# CA2263: generic overload instead of typeof()
+dotnet_diagnostic.CA2263.severity = suggestion

@@ -8,6 +8,10 @@
 A single `.exe`: no installer, no telemetry, no network.
 
 [![CI](https://github.com/marquezinii/V-Clicker/actions/workflows/ci.yml/badge.svg)](https://github.com/marquezinii/V-Clicker/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/marquezinii/V-Clicker/actions/workflows/codeql.yml/badge.svg)](https://github.com/marquezinii/V-Clicker/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/marquezinii/V-Clicker/badge)](https://scorecard.dev/viewer/?uri=github.com/marquezinii/V-Clicker)
+[![Release](https://img.shields.io/github/v/release/marquezinii/V-Clicker?label=release)](https://github.com/marquezinii/V-Clicker/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/marquezinii/V-Clicker/total?label=downloads)](https://github.com/marquezinii/V-Clicker/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4)
 
@@ -78,10 +82,16 @@ Requires the [.NET SDK](https://dotnet.microsoft.com/download) (any current vers
 
 ```powershell
 .\build.ps1                  # build -> src\bin\Release\net48\V-Clicker.exe
+.\build.ps1 -Lint            # formatting (dotnet format) and PSScriptAnalyzer checks, then the build
 .\build.ps1 -Test            # build and run the unit tests
-.\build.ps1 -Test -Package   # also writes dist\V-Clicker.exe, the .zip and SHA-256 files
+.\build.ps1 -Test -Coverage  # the same under a coverage collector -> TestResults\coverage\index.html
+.\build.ps1 -Test -Package   # also writes dist\V-Clicker.exe, the .zip and SHA-256 files, and smoke-tests the .exe
 .\build.ps1 -Integration     # + tests with real clicks and hotkeys (moves the cursor for a few seconds)
 ```
+
+The CI runs exactly these steps on every push and PR (on two Windows versions), plus a reproducible build, screenshots
+of every window, CodeQL and the Scorecard; releases are signed (Sigstore) and carry a build-provenance attestation.
+Details, and how to publish a release with one command, in [`docs/ci-cd.md`](docs/ci-cd.md) (Portuguese).
 
 ### Layout
 

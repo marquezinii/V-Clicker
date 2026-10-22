@@ -1,29 +1,315 @@
 name: CI
 
+# Every push to main and every pull request (docs/ci-cd.md):
+#   lint          dotnet format + PSScriptAnalyzer          workflows   actionlint on this folder
+#   unit-tests    163 unit tests on Windows 2022 and 2025   coverage    the same tests under dotnet-coverage, HTML report
+#   integration   real clicks and hotkeys on the runner     package     two builds must be byte-identical, then a smoke test
+#   screenshots   every window rendered to PNG              dev-release rolling "dev" pre-release from main (push only)
+#   pr-comment    download link + coverage on the PR        dependabot  Dependabot PRs are squash-merged once all of it is green
+
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_COVERAGE_TELEMETRY_OPTOUT: 1
+  DOTNET_COVERAGE_NOLOGO: 1
 
 jobs:
-  build-and-test:
+  lint:
+    name: Lint
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
-
-      - name: Build and run unit tests
+      - name: Install PSScriptAnalyzer
         shell: pwsh
-        run: ./build.ps1 -Test -Package
+        run: if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Install-Module PSScriptAnalyzer -Force -Scope CurrentUser }
+      - name: dotnet format, PSScriptAnalyzer and the build (analyzers at the recommended level, warnings are errors)
+        shell: pwsh
+        run: ./build.ps1 -Lint
 
-      - name: Upload the executable
-        uses: actions/upload-artifact@v7
+  workflows:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: actionlint
+        run: docker run --rm -v "${PWD}:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
+
+  unit-tests:
+    name: Unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          name: V-Clicker
+          dotnet-version: 10.0.x
+      - name: Build and run the unit tests
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory TestResults -Force | Out-Null
+          ./build.ps1 -Test | Tee-Object -FilePath TestResults/unit-tests.log
+      - name: Summary
+        if: always()
+        shell: pwsh
+        run: |
+          $log = @(Get-Content TestResults/unit-tests.log -ErrorAction SilentlyContinue)
+          $passed = @($log | Where-Object { $_ -match '^\s+ok\s' }).Count
+          $failed = @($log | Where-Object { $_ -match '^\s+FAIL\s' } | ForEach-Object { $_ -replace '^\s+FAIL\s+', '' })
+          $lines = @("### Unit tests on ${{ matrix.os }}", '', "$passed passed, $($failed.Count) failed")
+          if ($failed) { $lines += @('', '| Failed test |', '| --- |') + ($failed | ForEach-Object { "| $_ |" }) }
+          $lines | Add-Content $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: unit-tests-${{ matrix.os }}
+          path: TestResults/unit-tests.log
+          if-no-files-found: ignore
+
+  coverage:
+    name: Coverage
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: dotnet-tools-${{ runner.os }}-${{ hashFiles('.config/dotnet-tools.json') }}
+      - name: Unit tests under the coverage collector
+        shell: pwsh
+        run: ./build.ps1 -Test -Coverage
+      - name: Summary
+        if: always()
+        shell: pwsh
+        run: if (Test-Path TestResults/coverage/SummaryGithub.md) { Get-Content TestResults/coverage/SummaryGithub.md | Add-Content $env:GITHUB_STEP_SUMMARY }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: coverage-report
           path: |
-            dist/V-Clicker.exe
-            dist/*.sha256
+            TestResults/coverage/
+            TestResults/coverage.cobertura.xml
+          if-no-files-found: ignore
+
+  integration:
+    name: Integration tests (real input)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Build and run the unit and integration tests
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory TestResults -Force | Out-Null
+          ./build.ps1 -Integration | Tee-Object -FilePath TestResults/integration-tests.log
+      - name: Screenshot of the runner's desktop
+        if: failure()
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          $picture = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          $graphics = [System.Drawing.Graphics]::FromImage($picture)
+          $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $picture.Save("$PWD/TestResults/desktop.png")
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: integration-tests
+          path: TestResults/
+          if-no-files-found: ignore
+
+  package:
+    name: Package (reproducible build, smoke test)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact-url: ${{ steps.upload.outputs.artifact-url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content src/VClicker.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          "version=$version" >> $env:GITHUB_OUTPUT
+          # A build of main that is not a release says so in the file's product version (MSBuild reads it from the environment).
+          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_NAME -eq 'main') {
+            "InformationalVersion=$version-dev.$env:GITHUB_RUN_NUMBER" >> $env:GITHUB_ENV
+          }
+      - name: Build once and keep the hash
+        shell: pwsh
+        run: |
+          ./build.ps1
+          (Get-FileHash src/bin/Release/net48/V-Clicker.exe).Hash | Set-Content $env:RUNNER_TEMP/first.sha256
+      - name: Build again from a clean tree; the two executables must be identical
+        shell: pwsh
+        run: |
+          git clean -xdfq
+          ./build.ps1 -Package
+          $first = (Get-Content $env:RUNNER_TEMP/first.sha256).Trim()
+          $second = (Get-FileHash dist/V-Clicker.exe).Hash
+          if ($first -ne $second) { throw "The build is not reproducible: first $first, second $second." }
+          "Reproducible build: both builds of V-Clicker.exe hash to ``$($second.ToLower())``." | Add-Content $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: upload
+        with:
+          name: V-Clicker-dist
+          path: dist/
           if-no-files-found: error
+
+  screenshots:
+    name: Screenshots
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Build the test runner
+        shell: pwsh
+        run: dotnet build tests/VClicker.Tests/VClicker.Tests.csproj -c Release --nologo -v q
+      - name: Render every window to PNG (a no-op click sink; nothing is clicked)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory screenshots | Out-Null
+          $runner = 'tests/VClicker.Tests/bin/Release/net48/V-Clicker.Tests.exe'
+          $shots = @(
+            @('main-pt.png', 'pt'), @('main-en.png', 'en'), @('main-simple-pt.png', 'pt', 'simple'), @('main-running-pt.png', 'pt', 'running'),
+            @('studio-pt.png', 'pt', 'studio'), @('studio-en.png', 'en', 'studio'), @('studio-smart-pt.png', 'pt', 'studio', 'smart'),
+            @('profiles-pt.png', 'pt', 'profiles'), @('support-pt.png', 'pt', 'support'), @('ai-pt.png', 'pt', 'ai')
+          )
+          foreach ($shot in $shots) {
+            $name, $options = $shot
+            & $runner --screenshot "screenshots/$name" @options
+            if ($LASTEXITCODE -ne 0) { throw "Screenshot $name failed (exit code $LASTEXITCODE)." }
+          }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: screenshots
+          path: screenshots/
+          if-no-files-found: error
+
+  dev-release:
+    name: Rolling dev pre-release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint, workflows, unit-tests, coverage, integration, package, screenshots]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: V-Clicker-dist
+          path: dist
+      - name: Replace the "dev" pre-release with this build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          Automatic build of the latest commit on **main** (${GITHUB_SHA::7}, CI run #${GITHUB_RUN_NUMBER}). **Not a release**:
+          it carries the version ${VERSION} with a \`-dev.${GITHUB_RUN_NUMBER}\` label, is unsigned and may change behaviour.
+          Stable downloads are on the [latest release](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/latest).
+
+          Built by [CI run ${GITHUB_RUN_NUMBER}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) after the lint,
+          unit, coverage, integration, reproducible-build and screenshot jobs passed. Verify with the \`.sha256\` files.
+          EOF
+          gh release delete dev --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create dev dist/* --prerelease --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" \
+            --title "Development build (main)" --notes-file "$RUNNER_TEMP/notes.md"
+
+  pr-comment:
+    name: PR comment
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [package, coverage]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: coverage-report
+          path: coverage
+      - name: Create or update the comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          ARTIFACT_URL: ${{ needs.package.outputs.artifact-url }}
+          VERSION: ${{ needs.package.outputs.version }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- v-clicker-ci -->';
+            let coverage = '_No coverage summary was produced._';
+            try { coverage = fs.readFileSync('coverage/coverage/SummaryGithub.md', 'utf8'); } catch {}
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              marker,
+              `### CI for ${process.env.HEAD_SHA.slice(0, 7)}`,
+              '',
+              `- **Try this PR**: [download V-Clicker ${process.env.VERSION} built from it](${process.env.ARTIFACT_URL}) (zip with the .exe and SHA-256; unsigned development build).`,
+              `- **Checks**: [run ${context.runId}](${run}) — lint, unit tests on Windows 2022 and 2025, coverage, integration tests, reproducible build, screenshots.`,
+              '',
+              '<details><summary>Coverage of this PR</summary>',
+              '',
+              coverage,
+              '</details>',
+            ].join('\n');
+            const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: context.issue.number, per_page: 100 });
+            const mine = comments.find(c => c.body && c.body.includes(marker));
+            if (mine) await github.rest.issues.updateComment({ ...context.repo, comment_id: mine.id, body });
+            else await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+
+  dependabot:
+    name: Merge Dependabot PRs when green
+    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    needs: [lint, workflows, unit-tests, coverage, integration, package, screenshots]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Squash-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --squash --delete-branch "$PR_URL"

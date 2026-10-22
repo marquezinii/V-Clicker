@@ -1,0 +1,64 @@
+name: Prepare release
+
+# One click to release, with no local checkout needed:
+#   gh workflow run release-prepare.yml -f version=1.1.0
+# Bumps <Version> in src/VClicker.csproj, dates the Unreleased section of CHANGELOG.md, commits "Release v1.1.0" to
+# main, tags v1.1.0 and starts the Release workflow on that tag (a tag pushed with the workflow's own token does not
+# trigger it by itself). Locally, scripts/prepare-release.ps1 does the file part and you commit, tag and push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release: MAJOR.MINOR.PATCH, greater than the current one'
+        required: true
+        type: string
+
+permissions:
+  contents: write # the release commit and tag
+  actions: write # starts the Release workflow
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Bump, tag and start the release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Must run on main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run this workflow on main, not on '$GITHUB_REF'."
+          exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the script checks that the tag does not exist yet
+
+      - name: Bump the version and date the changelog
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: ./scripts/prepare-release.ps1 -Version $env:VERSION
+
+      - name: Commit, tag and push
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/VClicker.csproj CHANGELOG.md
+          git commit -m "Release v$VERSION"
+          git tag -a "v$VERSION" -m "V-Clicker v$VERSION"
+          git push origin main "v$VERSION"
+
+      - name: Start the Release workflow on the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh workflow run release.yml --ref "v$VERSION" --repo "$GITHUB_REPOSITORY"
+          echo "Tagged v$VERSION and started the Release workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/release.yml" >> "$GITHUB_STEP_SUMMARY"

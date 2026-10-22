@@ -1,0 +1,34 @@
+name: Links
+
+# Every link in the Markdown files must resolve: on PRs and pushes that touch them, and weekly for link rot.
+
+on:
+  pull_request:
+    paths: ['**.md']
+  push:
+    branches: [main]
+    paths: ['**.md']
+  schedule:
+    - cron: '45 8 * * 1' # Mondays, 08:45 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lychee:
+    name: Check links
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          # 403 and 429 are sites refusing bots or rate-limiting, not broken links.
+          args: >-
+            --no-progress
+            --exclude-mail
+            --accept 200..=204,403,429
+            --exclude-path docs/superpowers
+            '**/*.md'
+          fail: true

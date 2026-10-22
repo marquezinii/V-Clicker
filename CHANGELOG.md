@@ -22,6 +22,17 @@ All notable changes to this project are documented here. The format follows
   monogram and brand art). The previous cyan/violet brand files were removed.
 
 ### Added
+- **CI/CD overhaul** (see `docs/ci-cd.md`). Every push and PR now runs: lint (`dotnet format`, PSScriptAnalyzer, and
+  the .NET analyzers at the *recommended* level with warnings as errors), the unit tests on Windows 2022 and 2025,
+  the same tests under a coverage collector (HTML report, summary on the PR), the real-input integration tests, a
+  reproducible packaged build (two builds must be byte-identical) with a smoke test of the packaged `.exe`,
+  screenshots of every window, and actionlint on the workflows. PRs get one comment with a download link for their
+  build; every green push to `main` republishes the `dev` pre-release. Releases ship an SPDX SBOM, Sigstore
+  signatures and GitHub build-provenance attestations, with notes taken from this file, and
+  `gh workflow run release-prepare.yml -f version=X.Y.Z` bumps, tags and releases in one step. CodeQL, the OpenSSF
+  Scorecard, Dependabot (squash-merged when green), link checks and path labels run on the repository; every action
+  is pinned by commit SHA and the workflow token starts read-only. New switches `build.ps1 -Lint` and `-Coverage`;
+  `.gitattributes` checks out LF on every system.
 - **Support ♥** link in the main window's footer: a small window with Ko-fi (card or PayPal), the Pix QR code and the Pix key with a
   Copy button. Opened only when clicked; nothing asks for donations. The simple level's narrow footer leaves the
   version number out. The Pix QR code is a static PNG made by `assets/pix/make-pix-qr.py` (BR Code with the key, checked by

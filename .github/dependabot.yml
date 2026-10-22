@@ -1,0 +1,28 @@
+# Weekly updates of the pinned GitHub Actions (SHA and version comment) and of the .NET tools / packages.
+# The CI squash-merges Dependabot's PRs once every check is green (job "dependabot" in ci.yml).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Sao_Paulo
+    groups:
+      actions:
+        patterns: ['*']
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Sao_Paulo
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: build

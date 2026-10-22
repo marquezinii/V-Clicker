@@ -1,0 +1,12 @@
+<Project>
+
+  <!-- Shared by src/ and tests/. Each project already treats warnings as errors, so the analyzers below are a build gate;
+       rules the code base does not meet yet are lowered to suggestions in .editorconfig (ratchet them up as the code is fixed). -->
+  <PropertyGroup>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- Normalized paths and deterministic output on GitHub Actions (the CI checks that two builds are byte-identical). -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+</Project>

@@ -578,7 +578,9 @@ namespace VClicker.Tests
             switch (s.Kind)
             {
                 case StepKind.Wait: return "Wait " + s.DurationMs;
-                case StepKind.Click: case StepKind.DoubleClick: case StepKind.Hover:
+                case StepKind.Click:
+                case StepKind.DoubleClick:
+                case StepKind.Hover:
                     return s.Kind + " " + s.At.X + "," + s.At.Y;
                 case StepKind.Drag: return "Drag " + s.At.X + "," + s.At.Y + ">" + s.To.X + "," + s.To.Y;
                 case StepKind.Scroll: return "Scroll " + s.Notches;

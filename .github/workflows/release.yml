@@ -1,43 +1,153 @@
 name: Release
 
-# Publishes a GitHub release when a version tag is pushed:
-#   git tag v1.0.0 && git push origin v1.0.0
+# Publishes a GitHub release for a version tag with everything a download should come with: the .exe and .zip with
+# SHA-256 files, an SPDX SBOM, Sigstore signature bundles (keyless, bound to this workflow) and GitHub build-provenance
+# attestations. The notes are the version's CHANGELOG.md section, how to verify the files, and the merged PRs.
+# Two ways to start it (docs/ci-cd.md):
+#   gh workflow run release-prepare.yml -f version=1.1.0        bumps the version, dates the changelog, tags, runs this
+#   git tag -a v1.1.0 -m "V-Clicker v1.1.0" && git push origin v1.1.0
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch: # on a tag: gh workflow run release.yml --ref v1.1.0
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
 
 jobs:
   release:
+    name: Build, verify and publish ${{ github.ref_name }}
     runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # creates the release
+      id-token: write # Sigstore keyless signing and the provenance attestation
+      attestations: write
+    env:
+      VT_API_KEY: ${{ secrets.VT_API_KEY }} # optional: a VirusTotal API key adds a scan link to the notes
     steps:
-      - uses: actions/checkout@v7
+      - name: The ref must be a version tag
+        if: github.ref_type != 'tag' || !startsWith(github.ref_name, 'v')
+        run: |
+          echo "::error::Run this workflow on a vX.Y.Z tag, not on '$GITHUB_REF'."
+          exit 1
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
-      - name: Tag must match the project version
+      - name: The tag must match the project version, and the changelog must have its section
+        id: version
         shell: pwsh
         run: |
           $version = ([xml](Get-Content src/VClicker.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
           if ($env:GITHUB_REF_NAME -ne "v$version") {
             throw "Tag $env:GITHUB_REF_NAME does not match <Version>$version</Version> in src/VClicker.csproj."
           }
+          if (-not (Select-String -Path CHANGELOG.md -Pattern "^## \[$([regex]::Escape($version))\]" -Quiet)) {
+            throw "CHANGELOG.md has no '## [$version]' section: run scripts/prepare-release.ps1 first."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
 
-      - name: Build, test and package
+      - name: Install PSScriptAnalyzer
         shell: pwsh
-        run: ./build.ps1 -Test -Package
+        run: if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Install-Module PSScriptAnalyzer -Force -Scope CurrentUser }
 
-      - name: Create the release
+      - name: Lint, build, test, package and smoke-test the executable
+        shell: pwsh
+        run: ./build.ps1 -Lint -Test -Package
+
+      - name: SBOM (SPDX 2.2, Microsoft sbom-tool)
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh release create $env:GITHUB_REF_NAME `
-            dist/V-Clicker.exe dist/V-Clicker.exe.sha256 `
-            (Get-ChildItem dist/*.zip) (Get-ChildItem dist/*.zip.sha256) `
-            --title "V-Clicker $env:GITHUB_REF_NAME" --generate-notes
+          dotnet tool restore
+          dotnet sbom-tool generate -b dist -bc src -pn V-Clicker -pv $env:VERSION -ps Vemryx -nsb https://github.com/marquezinii/V-Clicker -V Warning
+          if ($LASTEXITCODE -ne 0) { throw "sbom-tool failed (exit code $LASTEXITCODE)." }
+          Move-Item dist/_manifest/spdx_2.2/manifest.spdx.json "dist/V-Clicker-$env:VERSION.spdx.json"
+          Remove-Item dist/_manifest -Recurse
+
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.10.1
+      - name: Sign the executable and the zip (Sigstore, keyless, bound to this workflow's identity)
+        shell: pwsh
+        run: |
+          foreach ($file in Get-ChildItem dist/V-Clicker.exe, dist/*.zip) {
+            cosign sign-blob --yes --bundle "$($file.FullName).sigstore.json" $file.FullName
+            if ($LASTEXITCODE -ne 0) { throw "cosign failed for $($file.Name) (exit code $LASTEXITCODE)." }
+          }
+
+      - name: Attest the build provenance (verifiable with "gh attestation verify")
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/V-Clicker.exe
+            dist/*.zip
+
+      - name: VirusTotal scan
+        id: virustotal
+        if: env.VT_API_KEY != ''
+        uses: crazy-max/ghaction-virustotal@936d8c5c00afe97d3d9a1af26d017cfdf26800a2 # v5.0.0
+        with:
+          vt_api_key: ${{ env.VT_API_KEY }}
+          files: dist/V-Clicker.exe
+
+      - name: Release notes (the changelog section, then how to verify the download)
+        id: notes
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          VIRUSTOTAL: ${{ steps.virustotal.outputs.analysis }}
+        run: |
+          $text = Get-Content CHANGELOG.md -Raw
+          $section = [regex]::Match($text, "(?ms)^## \[$([regex]::Escape($env:VERSION))\][^\n]*\n(.*?)(?=^## \[|\z)").Groups[1].Value.Trim()
+          $verify = @'
+          ## Verify your download
+
+          | Check | Command (PowerShell, in the folder of the download) |
+          | --- | --- |
+          | SHA-256 | `(Get-FileHash V-Clicker.exe).Hash.ToLower() -eq (Get-Content V-Clicker.exe.sha256).Split(' ')[0]` |
+          | Build provenance ([GitHub CLI](https://cli.github.com)) | `gh attestation verify V-Clicker.exe --repo marquezinii/V-Clicker` |
+          | Signature ([cosign](https://github.com/sigstore/cosign)) | `cosign verify-blob --bundle V-Clicker.exe.sigstore.json --certificate-identity-regexp '^https://github.com/marquezinii/V-Clicker/\.github/workflows/release\.yml@refs/tags/v' --certificate-oidc-issuer https://token.actions.githubusercontent.com V-Clicker.exe` |
+
+          The `.zip` has the same companion files; `V-Clicker-{VERSION}.spdx.json` is the SBOM. Built unattended by
+          [this workflow run]({RUN_URL}) from commit {SHA}, after the lint, unit tests and the smoke test of the packaged
+          executable passed. The executable is not code-signed, so Windows SmartScreen may warn the first time it runs.
+          '@
+          $run = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          $verify = $verify.Replace('{VERSION}', $env:VERSION).Replace('{RUN_URL}', $run).Replace('{SHA}', $env:GITHUB_SHA)
+          if ($env:VIRUSTOTAL) {
+            $links = $env:VIRUSTOTAL.Split(',') | ForEach-Object { $name, $url = $_.Split('=', 2); "[$(Split-Path $name -Leaf)]($url)" }
+            $verify += "`n`nVirusTotal: $($links -join ', ')."
+          }
+          $notes = Join-Path $env:RUNNER_TEMP 'notes.md'
+          [IO.File]::WriteAllText($notes, "$section`n`n$verify`n")
+          "path=$notes" >> $env:GITHUB_OUTPUT
+
+      - name: Create the GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ steps.notes.outputs.path }}
+        run: |
+          $assets = Get-ChildItem dist -File | ForEach-Object FullName
+          gh release create $env:GITHUB_REF_NAME @assets --title "V-Clicker $env:GITHUB_REF_NAME" --notes-file $env:NOTES --generate-notes --verify-tag --latest
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed (exit code $LASTEXITCODE)." }
+          "Released **V-Clicker $env:GITHUB_REF_NAME**: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/releases/tag/$env:GITHUB_REF_NAME" | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: V-Clicker-${{ steps.version.outputs.version }}
+          path: dist/
+          if-no-files-found: error

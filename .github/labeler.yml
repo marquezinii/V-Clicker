@@ -1,0 +1,23 @@
+# Labels applied to pull requests by the paths they change (.github/workflows/labeler.yml).
+app:
+  - changed-files:
+      - any-glob-to-any-file: ['src/**']
+tests:
+  - changed-files:
+      - any-glob-to-any-file: ['tests/**']
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - '.config/**'
+          - 'build.ps1'
+          - 'scripts/**'
+          - 'Directory.Build.props'
+          - '.editorconfig'
+          - 'PSScriptAnalyzerSettings.psd1'
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ['**/*.md', 'docs/**']
+assets:
+  - changed-files:
+      - any-glob-to-any-file: ['assets/**']

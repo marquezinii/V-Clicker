@@ -8,6 +8,10 @@
 Um único `.exe`, sem instalador, sem telemetria, sem rede.
 
 [![CI](https://github.com/marquezinii/V-Clicker/actions/workflows/ci.yml/badge.svg)](https://github.com/marquezinii/V-Clicker/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/marquezinii/V-Clicker/actions/workflows/codeql.yml/badge.svg)](https://github.com/marquezinii/V-Clicker/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/marquezinii/V-Clicker/badge)](https://scorecard.dev/viewer/?uri=github.com/marquezinii/V-Clicker)
+[![Release](https://img.shields.io/github/v/release/marquezinii/V-Clicker?label=release)](https://github.com/marquezinii/V-Clicker/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/marquezinii/V-Clicker/total?label=downloads)](https://github.com/marquezinii/V-Clicker/releases)
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue.svg)](LICENSE)
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4)
 
@@ -78,10 +82,16 @@ Requer o [.NET SDK](https://dotnet.microsoft.com/download) (qualquer versão atu
 
 ```powershell
 .\build.ps1                  # compila -> src\bin\Release\net48\V-Clicker.exe
+.\build.ps1 -Lint            # formatação (dotnet format) e PSScriptAnalyzer, depois compila
 .\build.ps1 -Test            # compila e roda os testes unitários
-.\build.ps1 -Test -Package   # gera também dist\V-Clicker.exe, o .zip e os SHA-256
+.\build.ps1 -Test -Coverage  # o mesmo medindo cobertura -> TestResults\coverage\index.html
+.\build.ps1 -Test -Package   # gera também dist\V-Clicker.exe, o .zip e os SHA-256, e testa o .exe empacotado
 .\build.ps1 -Integration     # + testes com cliques e atalhos reais (move o cursor por alguns segundos)
 ```
+
+A CI roda exatamente esses passos em cada push e PR (em dois Windows), mais uma build reproduzível, capturas de tela de
+cada janela, CodeQL e o Scorecard; as releases saem assinadas (Sigstore) e com atestado de procedência. Detalhes, e como
+lançar uma versão com um comando, em [`docs/ci-cd.md`](docs/ci-cd.md).
 
 ### Estrutura
 

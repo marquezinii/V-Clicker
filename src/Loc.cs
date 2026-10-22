@@ -140,7 +140,7 @@ namespace VClicker
             ["opt.hud"] = new[] { "Indicador na tela", "On-screen indicator" },
             ["opt.hud.tip"] = new[] { "Um pequeno indicador de estado no canto da tela, por cima do jogo. Não recebe cliques nem foco.", "A small status indicator in a screen corner, over the game. It never takes clicks or focus." },
             ["admin.on"] = new[] { "Administrador", "Administrator" },
-            ["link.admin"] = new[]{ "Reiniciar como admin", "Restart as admin" },
+            ["link.admin"] = new[] { "Reiniciar como admin", "Restart as admin" },
             ["madeBy"] = new[] { "Feito pela {0}", "Made by {0}" },
             ["link.admin.tip"] = new[] { "Necessário para clicar em programas que rodam como administrador.", "Needed to click inside programs that run as administrator." },
             ["tray.show"] = new[] { "Abrir V-Clicker", "Open V-Clicker" },

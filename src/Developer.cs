@@ -212,7 +212,10 @@ namespace VClicker
             {
                 case null: json.Append("null"); return;
                 case bool flag: json.Append(flag ? "true" : "false"); return;
-                case int _: case long _: case double _: case float _:
+                case int _:
+                case long _:
+                case double _:
+                case float _:
                     json.Append(Convert.ToString(value, CultureInfo.InvariantCulture)); return;
             }
             json.Append('"');
