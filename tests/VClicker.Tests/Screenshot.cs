@@ -32,7 +32,7 @@ namespace VClicker.Tests
             if (Array.IndexOf(options, "profiles") >= 0) return TakeProfiles(output, language);
             try
             {
-                new ClickSettings { Language = language, StartDelaySeconds = 0, Sounds = false, IntervalMs = 100 }.Save(ini);
+                new ClickSettings { Language = language, StartDelaySeconds = 0, Sounds = false, IntervalMs = 100, Advanced = Array.IndexOf(options, "simple") < 0 }.Save(ini);
                 using (var form = new MainForm(ini, new NullSink()))
                 {
                     form.StartPosition = FormStartPosition.Manual;

@@ -22,6 +22,7 @@ namespace VClicker.Tests
             MiscTests();
             MacroTests.Run();
             ProfileTests.Run();
+            AdaptiveTests.Run();
         }
 
         // ------------------------------------------------------------------ hotkeys

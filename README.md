@@ -19,6 +19,7 @@ Um único `.exe`, sem instalador, sem telemetria, sem rede.
 
 ## Recursos
 
+- **Modo simples ou avançado**: o seletor no topo troca entre uma janela enxuta (velocidade, botão do mouse e atalhos, para quem só quer apertar F6) e a completa. Instalações novas começam no simples; o que foi configurado no avançado continua valendo, e o simples avisa numa linha ("Também valendo: Window Lock (Roblox) · posição fixa…").
 - **Velocidade de verdade** – intervalo de **1 ms** até 24 h (até ~1000 cliques/s, dependendo do programa-alvo), com agenda absoluta que não acumula atraso e espera de alta resolução.
 - **Velocidade em CPS** (cliques por segundo, com uma casa decimal) ou **intervalo em h / min / s / ms**: os dois editam a mesma velocidade, sem arredondar (15 CPS = 66,667 ms). Atalhos `5`, `10`, `15`, `20` e `50 CPS`.
 - **Window Lock**: escolha um aplicativo (ex.: Roblox) e o V-Clicker só clica com ele em primeiro plano. Num Alt+Tab, **pausa e retoma sozinho** quando você volta (ou para, se preferir). F6 só começa com o aplicativo na frente; o botão *Iniciar* o traz para a frente. Para de vez se a janela fechar, se a pausa passar de 5 minutos ou se o PC for bloqueado ou suspenso.
@@ -98,7 +99,7 @@ src/             o aplicativo (WinForms, .NET Framework 4.8, sem dependências d
   Settings.cs      configurações em .ini, com validação e fallback seguro
   MainForm.cs      janela principal;  Controls.cs / Theme.cs / Icons.cs  teclas, LEDs, display e ícones desenhados (DESIGN.md)
   Loc.cs           textos em português e inglês
-tests/           executor de testes sem dependências (127 testes unitários + 8 de integração)
+tests/           executor de testes sem dependências (136 testes unitários + 8 de integração)
 assets/          ícone do app e identidade visual (assets/brand: ícone, logos e artes da marca)
 docs/            capturas de tela
 ```
