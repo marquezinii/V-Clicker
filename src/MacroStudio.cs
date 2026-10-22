@@ -1426,6 +1426,7 @@ namespace VClicker
                 {
                     if (!recordAppend)
                     {
+                        aiNote = null; // a new recording replaced the proposal
                         macro.Steps = steps;
                         macro.ExeName = window.ExeName;
                         macro.Title = window.Title;

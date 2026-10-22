@@ -210,6 +210,7 @@ namespace VClicker.Tests
                 })
                 {
                     IntPtr handle = dialog.Handle;
+                    True(dialog.KeyPreview, "Esc reaches the window even from the text box");
                     dialog.GenerateAsync().Wait();
                     Equal(Loc.T("ai.needText"), dialog.StatusText, "nothing to send");
                     True(dialog.Result == null, "no proposal");
