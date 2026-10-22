@@ -156,6 +156,26 @@ namespace VClicker.Tests
                         form.Location = new Point(area.Right - form.Width, area.Top);
                         Find<Segmented>(form, s => s.AccessibleName == "Interface level").SelectedIndex = 1;
                         Application.DoEvents();
+                        // A screen narrower than the window (1024 px CI runners): its left edge stays on the screen.
+                        True(form.Width > area.Width ? form.Left == area.Left : form.Right <= area.Right,
+                             "window " + form.Left + ".." + form.Right + " on screen " + area.Left + ".." + area.Right);
+                    }
+                }
+                finally { File.Delete(ini); }
+            });
+
+            Test("window: on a short, narrow screen the scroll bar's width is counted before keeping it on the screen", () =>
+            {
+                string ini = TempIni();
+                try
+                {
+                    new ClickSettings().Save(ini); // advanced: the widest window
+                    using (MainForm form = Open(ini))
+                    {
+                        var area = new Rectangle(form.Left - 200, form.Top, form.Width + 250, form.Height - 100); // 50 px to spare, too short
+                        form.Left = area.Right - form.Width; // flush with the right edge
+                        form.FitToScreen(area);
+                        True(form.AutoScroll, "scrolls");
                         True(form.Right <= area.Right, "right edge " + form.Right + " within " + area.Right);
                     }
                 }
