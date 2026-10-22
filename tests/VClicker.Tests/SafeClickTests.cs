@@ -198,6 +198,28 @@ namespace VClicker.Tests
                 }
             });
 
+            Test("simulation: every mouse step reads as a sentence, a drag included", () =>
+            {
+                using (var form = new Form { ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Location = new Point(-2000, -2000), Size = new Size(300, 200) })
+                {
+                    form.Show();
+                    uint process = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                    Macro macro = Steps(1,
+                        new MacroStep { Kind = StepKind.Click, At = new Point(10, 10) },
+                        new MacroStep { Kind = StepKind.DoubleClick, At = new Point(10, 10) },
+                        new MacroStep { Kind = StepKind.Drag, At = new Point(10, 10), To = new Point(40, 30) },
+                        new MacroStep { Kind = StepKind.Hover, At = new Point(10, 10) },
+                        new MacroStep { Kind = StepKind.Scroll, At = new Point(10, 10), Count = 3 });
+                    Func<IntPtr, WindowShot> shoot = window => new WindowShot(new Bitmap(300, 200), WindowLock.ClientArea(window), ShotProblem.None);
+                    using (MacroPreviewResult result = MacroPreview.Evaluate(macro, form.Handle, process, shoot, System.Threading.CancellationToken.None))
+                        for (int i = 0; i < macro.Steps.Count; i++)
+                        {
+                            string sentence = SimulationDialog.Sentence(macro.Steps[i], result.Steps[i]);
+                            True(!sentence.Contains("sim."), macro.Steps[i].Kind + " shows a raw text key: " + sentence);
+                        }
+                }
+            });
+
             Test("simulation: marker layout scales and merges", () =>
             {
                 RectangleF fit = MarkerLayout.Fit(new Size(2000, 1000), new Rectangle(10, 20, 500, 400));
