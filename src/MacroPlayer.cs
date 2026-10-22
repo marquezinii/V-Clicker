@@ -127,6 +127,8 @@ namespace VClicker
         private Func<MacroStep, CancellationToken, TargetLook> locate;
         private Func<MacroStep, TargetLook, CancellationToken, ConditionRead> confirm;
         private TargetLook lastTarget;
+        /// <summary>Values for {{name}} in typed text (<see cref="MacroVariables"/>).</summary>
+        private Dictionary<string, string> values;
 
         public const int WatchPollMs = 100;
         /// <summary>Consecutive positive reads before a condition counts as met (one flicker is not enough).</summary>
@@ -152,6 +154,9 @@ namespace VClicker
 
         /// <summary>Raised on the worker thread when a run ends. Marshal to the UI thread yourself.</summary>
         public event Action<MacroStopReason> Stopped;
+
+        /// <summary>Raised on the worker thread as each step begins: 0-based index, 1-based repetition, the step.</summary>
+        public event Action<int, int, MacroStep> StepStarted;
 
         public MacroPhase Phase => (MacroPhase)Volatile.Read(ref phase);
         public MacroCheck PauseCause => (MacroCheck)Volatile.Read(ref pauseCause);
@@ -187,10 +192,12 @@ namespace VClicker
         /// <param name="condition">Reads "wait until" conditions (null: they are never met and time out).</param>
         /// <param name="locate">Looks for a click's target (null: never found, the step times out).</param>
         /// <param name="confirm">The last look at a found target right before its click (null: never confirmed).</param>
+        /// <param name="values">Values for {{name}} in typed text (copied).</param>
         public bool Start(Macro macro, Func<MacroStep, MacroCheckResult> guard, int countdownMs = 3000,
                           Func<MacroStep, CancellationToken, ConditionRead> condition = null,
                           Func<MacroStep, CancellationToken, TargetLook> locate = null,
-                          Func<MacroStep, TargetLook, CancellationToken, ConditionRead> confirm = null)
+                          Func<MacroStep, TargetLook, CancellationToken, ConditionRead> confirm = null,
+                          IDictionary<string, string> values = null)
         {
             lock (gate)
             {
@@ -208,6 +215,7 @@ namespace VClicker
                 Func<MacroStep, CancellationToken, TargetLook> finder = locate ?? ((s, t) => new TargetLook());
                 Func<MacroStep, TargetLook, CancellationToken, ConditionRead> checker = confirm ?? ((s, l, t) => ConditionRead.NotYet);
                 Volatile.Write(ref lastTarget, null);
+                this.values = new Dictionary<string, string>(values ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
                 worker = new Thread(() => Run(copy, guard, reader, finder, checker, countdownMs, runToken))
                 {
                     IsBackground = true,
@@ -304,6 +312,7 @@ namespace VClicker
                 Volatile.Write(ref stepIndex, i);
                 PastLimit();
                 MacroStep step = macro.Steps[i];
+                StepStarted?.Invoke(i, Iteration, step);
                 if (step.Kind == StepKind.Wait)
                 {
                     due += Ticks(step.DurationMs);
@@ -374,11 +383,12 @@ namespace VClicker
                     break;
                 }
                 case StepKind.Type:
-                    for (int k = 0; k < step.Text.Length; k++)
+                    string text = MacroVariables.Expand(step.Text, values, Iteration);
+                    for (int k = 0; k < text.Length; k++)
                     {
                         if (k > 0) SleepUntil(start + Ticks(k * CharGapMs));
                         Check(step); // before every character: a switch mid-text pauses before the next one
-                        Do(sink.Char(step.Text[k]));
+                        Do(sink.Char(text[k]));
                     }
                     break;
                 case StepKind.Key:

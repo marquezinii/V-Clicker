@@ -20,6 +20,7 @@ namespace VClicker.Tests
             ConditionTests();
             SmartTargetTests();
             SafeClickTests();
+            DeveloperTests();
         }
 
         // ------------------------------------------------------------------ wait until (Conditional Click)

@@ -46,7 +46,9 @@ focus loss, per-app profiles with export/import), configurable hotkeys, always o
 link, live stats (clicks, requested CPS, sent CPS, time), notices. Macro Studio: record, run, stop, repetitions,
 macro list (new, rename, delete, save), step list and step editor, long-pause optimizer, conditions and smart target
 dialogs, undo/redo. SafeClick: simulate (passive, over a window capture), safety review before impactful
-shortcuts, optional duration limit per macro.
+shortcuts, optional duration limit per macro. Developer Mode: command line (`--macro`, `--profile`, `--var`, `--log`,
+`--exit-when-done`) through the same window and safeguards, `{{variables}}` in typed text, JSON Lines run logs that
+never contain typed text, documented file formats (`docs/developer.md`).
 
 Constraints: high DPI (every metric through `Theme.Dp`), keyboard and screen-reader access on custom controls,
 dark title bar via DWM, laptop-sized window (scrolls on short screens), PT and EN text lengths, tests drive the real

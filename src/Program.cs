@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -18,9 +19,30 @@ namespace VClicker
             return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "V-Clicker", "settings.ini");
         }
 
+        [DllImport("kernel32.dll")]
+        private static extern bool AttachConsole(int processId);
+
+        private static bool consoleAttached;
+
+        /// <summary>A line for whoever started V-Clicker from a console (a GUI app has none of its own).</summary>
+        internal static void Say(string text)
+        {
+            if (!consoleAttached) consoleAttached = AttachConsole(-1); // ATTACH_PARENT_PROCESS
+            try { Console.Error.WriteLine(text); }
+            catch (IOException) { } // no console, nobody to tell
+        }
+
         [STAThread]
         private static int Main(string[] args)
         {
+            // Developer Mode's command line (docs/developer.md): checked before anything opens.
+            CommandLine command = CommandLine.Parse(args);
+            if (command.Help || command.Error != null)
+            {
+                Say((command.Error != null ? command.Error + "\n\n" : string.Empty) + CommandLine.Usage);
+                return command.Help ? ExitCodes.Done : ExitCodes.BadArguments;
+            }
+
             // Relaunching as administrator: give the old instance a moment to exit first.
             bool waitForPrevious = Array.IndexOf(args, "--wait-previous") >= 0;
 
@@ -41,15 +63,13 @@ namespace VClicker
             catch (UnauthorizedAccessException)
             {
                 // The running instance is elevated and we are not (or vice versa).
-                SignalRunningInstance();
-                return 0;
+                return AlreadyRunning(command);
             }
 
             if (!owned)
             {
-                SignalRunningInstance();
                 mutex.Dispose();
-                return 0;
+                return AlreadyRunning(command);
             }
 
             try
@@ -60,7 +80,7 @@ namespace VClicker
                 Application.ThreadException += (sender, e) => ReportCrash(e.Exception);
 
                 using (var showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName))
-                using (var form = new MainForm(SettingsPath()))
+                using (var form = new MainForm(SettingsPath()) { Command = command })
                 {
                     RegisteredWaitHandle registration = ThreadPool.RegisterWaitForSingleObject(
                         showSignal, (state, timedOut) => RequestShow(form), null, Timeout.Infinite, false);
@@ -72,14 +92,25 @@ namespace VClicker
                     {
                         registration.Unregister(null);
                     }
+                    return form.ExitCode;
                 }
-                return 0;
             }
             finally
             {
                 mutex.ReleaseMutex();
                 mutex.Dispose();
             }
+        }
+
+        /// <summary>
+        /// A second launch shows the open window. A command does not act through it: one V-Clicker at a time moves the mouse.
+        /// </summary>
+        private static int AlreadyRunning(CommandLine command)
+        {
+            SignalRunningInstance();
+            if (!command.HasAction) return ExitCodes.Done;
+            Say("V-Clicker is already open: close it to run a command.");
+            return ExitCodes.AlreadyRunning;
         }
 
         private static void RequestShow(MainForm form)
