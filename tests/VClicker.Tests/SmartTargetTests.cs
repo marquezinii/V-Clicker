@@ -197,7 +197,7 @@ namespace VClicker.Tests
             });
             Test("smart target in the studio: a click becomes a target and back exactly, even after saving", () =>
             {
-                string ini = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                string ini = StudioIni();
                 using (var studio = new MacroStudio(null, new ClickSettings(), ini))
                 {
                     Macro macro = Steps(1,

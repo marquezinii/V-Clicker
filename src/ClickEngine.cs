@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace VClicker
@@ -75,7 +74,6 @@ namespace VClicker
 
     internal sealed class SendInputSink : IClickSink
     {
-        private static readonly int InputSize = Marshal.SizeOf(typeof(Native.INPUT));
         // [button][0 = single, 1 = double]
         private readonly Native.INPUT[][][] cache = new Native.INPUT[3][][];
 
@@ -85,11 +83,11 @@ namespace VClicker
             if (at.HasValue && !Native.SetCursorPos(at.Value.X, at.Value.Y)) return false;
 
             Native.INPUT[] inputs = Build(button, doubleClick);
-            if (Native.SendInput((uint)inputs.Length, inputs, InputSize) == inputs.Length) return true;
+            if (Native.SendInput(inputs)) return true;
 
             // Partially delivered: make sure the button does not stay held down.
             Native.INPUT release = inputs[1];
-            Native.SendInput(1, new[] { release }, InputSize);
+            Native.SendInput(release);
             return false;
         }
 
@@ -335,7 +333,7 @@ namespace VClicker
                 while (true)
                 {
                     if (token.IsCancellationRequested) { reason = Requested; break; }
-                    if (plan.HoldKey != 0 && !isKeyDown(plan.HoldKey)) { reason = StopReason.KeyReleased; break; }
+                    if (Released(plan)) { reason = StopReason.KeyReleased; break; }
 
                     // Window Lock is asked right before every click; a pause blocks inside AwaitLock.
                     StopReason? locked = AwaitLock(plan, token, out bool resumed);
@@ -432,7 +430,7 @@ namespace VClicker
                 while (true)
                 {
                     if (token.WaitHandle.WaitOne(PausePollMs)) return Requested;
-                    if (plan.HoldKey != 0 && !isKeyDown(plan.HoldKey)) return StopReason.KeyReleased;
+                    if (Released(plan)) return StopReason.KeyReleased;
                     // Measured from when the pause began; repeated focus changes do not restart it.
                     long now = Stopwatch.GetTimestamp();
                     if (now - pauseStart >= limit) return StopReason.PauseTimeout;
@@ -482,14 +480,17 @@ namespace VClicker
             return Math.Max(1, (long)ticks);
         }
 
+        // Hold mode: the hotkey is no longer held down.
+        private bool Released(ClickPlan plan) => plan.HoldKey != 0 && !isKeyDown(plan.HoldKey);
+
         private StopReason? WaitUntil(long target, ClickPlan plan, CancellationToken token)
         {
             while (true)
             {
                 if (token.IsCancellationRequested) return Requested;
-                if (plan.HoldKey != 0 && !isKeyDown(plan.HoldKey)) return StopReason.KeyReleased;
+                if (Released(plan)) return StopReason.KeyReleased;
 
-                double remainingMs = (target - Stopwatch.GetTimestamp()) * 1000.0 / Stopwatch.Frequency;
+                double remainingMs = TicksToMs(target - Stopwatch.GetTimestamp());
                 if (remainingMs <= 0) return null;
                 if (remainingMs > 2.5)
                 {
@@ -509,7 +510,7 @@ namespace VClicker
 
         private static double TicksToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
 
-        private static TimeSpan Span(long ticks) => TimeSpan.FromSeconds((double)ticks / Stopwatch.Frequency);
+        internal static TimeSpan Span(long ticks) => TimeSpan.FromSeconds((double)ticks / Stopwatch.Frequency);
 
         public void Dispose()
         {

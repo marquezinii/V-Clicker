@@ -941,7 +941,8 @@ namespace VClicker
     {
         private Color led = Theme.Dim;
         private bool ledLit, lockLit;
-        private string status = string.Empty, rate = string.Empty, rateCaption = string.Empty, lockCaption = "LOCK";
+        private string status = string.Empty, rate = string.Empty, rateCaption = string.Empty;
+        private const string LockCaption = "LOCK";
         private readonly string[] captions = { string.Empty, string.Empty, string.Empty };
         private readonly string[] values = { string.Empty, string.Empty, string.Empty };
         private string message = string.Empty;
@@ -958,8 +959,6 @@ namespace VClicker
         protected override Size DefaultSize => Theme.Sz(372, 166);
 
         public string Status => status;
-
-        public string Message => message;
 
         private void Set<T>(ref T field, T value)
         {
@@ -982,11 +981,7 @@ namespace VClicker
             Set(ref rateCaption, caption ?? string.Empty);
         }
 
-        public void SetLock(bool lit, string caption)
-        {
-            Set(ref lockLit, lit);
-            Set(ref lockCaption, caption ?? string.Empty);
-        }
+        public void SetLock(bool lit) => Set(ref lockLit, lit);
 
         public void SetReadout(int index, string caption, string value)
         {
@@ -1037,8 +1032,8 @@ namespace VClicker
             Font caption = Theme.Legend(7.5f, bold: true);
             int lampX = Width - pad - (int)(6 * k);
             Theme.DrawLed(g, new PointF(lampX + 3 * k, top + lineHeight / 2f), 6 * k, Theme.Accent, lockLit);
-            int lampWidth = TrackedWidth(g, lockCaption, caption, 1.2f * k);
-            Theme.DrawTracked(g, lockCaption, caption, lampX - (int)(8 * k) - lampWidth, new Rectangle(0, top, Width, lineHeight),
+            int lampWidth = TrackedWidth(g, LockCaption, caption, 1.2f * k);
+            Theme.DrawTracked(g, LockCaption, caption, lampX - (int)(8 * k) - lampWidth, new Rectangle(0, top, Width, lineHeight),
                 lockLit ? Theme.Text : Theme.Dim, 1.2f * k);
             var statusArea = new Rectangle(pad + (int)(16 * k), top, lampX - lampWidth - pad - (int)(30 * k), lineHeight);
             TextRenderer.DrawText(g, status, Theme.Legend(10f, bold: true), statusArea, Theme.Text, Theme.LeftMiddle);

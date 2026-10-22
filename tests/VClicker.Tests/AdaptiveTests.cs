@@ -11,14 +11,7 @@ namespace VClicker.Tests
     /// <summary>Adaptive interface (docs/superpowers/specs/2026-10-21-adaptive-interface-design.md).</summary>
     internal static class AdaptiveTests
     {
-        private static IEnumerable<Control> All(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(All(c)));
-
         private static T Find<T>(Control root, Func<T, bool> match) where T : Control => All(root).OfType<T>().First(match);
-
-        private sealed class NullSink : IClickSink
-        {
-            public bool Click(ClickButton button, bool doubleClick, Point? at) => true;
-        }
 
         private static MainForm Open(string ini)
         {

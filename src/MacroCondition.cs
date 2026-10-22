@@ -91,7 +91,7 @@ namespace VClicker
             if (step.Condition == ConditionKind.Element) return ReadElement(anchor, process, step, cancel);
             Rectangle client = WindowLock.ClientArea(anchor);
             var screen = new Point(client.X + step.At.X, client.Y + step.At.Y);
-            var area = new Rectangle(screen.X - Half, screen.Y - Half, 2 * Half + 1, 2 * Half + 1);
+            Rectangle area = Around(screen);
             if (!client.Contains(area)) return ConditionRead.NotYet;
             ConditionRead cover = Cover(anchor, process, area);
             if (cover != ConditionRead.Met) return cover;
@@ -108,7 +108,16 @@ namespace VClicker
         {
             TargetLook found = SmartTargets.Look(anchor, process, ElementTarget(step), null, Rectangle.Empty, cancel);
             if (found.Read != ConditionRead.Met) return ConditionRead.NotYet;
-            var area = new Rectangle(found.Screen.X - Half, found.Screen.Y - Half, 2 * Half + 1, 2 * Half + 1);
+            return CoverAround(anchor, process, found.Screen);
+        }
+
+        /// <summary>The 5x5 pixels around a point: what a colour reads and what must not be covered.</summary>
+        internal static Rectangle Around(Point p) => new Rectangle(p.X - Half, p.Y - Half, 2 * Half + 1, 2 * Half + 1);
+
+        /// <summary>The 5x5 pixels around <paramref name="screen"/> are inside the window's client area and not covered.</summary>
+        internal static ConditionRead CoverAround(IntPtr anchor, uint process, Point screen)
+        {
+            Rectangle area = Around(screen);
             if (!WindowLock.ClientArea(anchor).Contains(area)) return ConditionRead.NotYet;
             return Cover(anchor, process, area);
         }
@@ -148,7 +157,7 @@ namespace VClicker
         /// <summary>The average colour of 5x5 pixels around the point (0xRRGGBB); null if it cannot be read safely.</summary>
         private static int? ReadColor(IntPtr anchor, Point screen)
         {
-            var area = new Rectangle(screen.X - Half, screen.Y - Half, 2 * Half + 1, 2 * Half + 1);
+            Rectangle area = Around(screen);
             foreach (Point p in Probes(area))
                 if (MacroTarget.RootAt(p) != anchor) return null; // something else is on top of part of it
             IntPtr dc = GetDC(IntPtr.Zero);
@@ -168,7 +177,7 @@ namespace VClicker
         /// <summary>The same 5x5 average in a capture of the client area (the simulation); null when it leaves the capture.</summary>
         internal static int? AverageColor(Bitmap shot, Point at)
         {
-            var area = new Rectangle(at.X - Half, at.Y - Half, 2 * Half + 1, 2 * Half + 1);
+            Rectangle area = Around(at);
             if (!new Rectangle(Point.Empty, shot.Size).Contains(area)) return null;
             return Average(area, (x, y) => shot.GetPixel(x, y).ToArgb() & 0xFFFFFF);
         }

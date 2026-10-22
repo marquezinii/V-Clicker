@@ -61,15 +61,15 @@ namespace VClicker
             int width = Theme.Dp(420);
 
             var body = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, Dock = DockStyle.Fill, BackColor = Theme.Bg };
-            body.Controls.Add(Line(Loc.T("support.intro"), Theme.Text, width, 16));
+            body.Controls.Add(Dialogs.Paragraph(Loc.T("support.intro"), Theme.Text, width, 16));
 
-            body.Controls.Add(Line(Loc.T("support.kofi"), Theme.Dim, width, 6));
+            body.Controls.Add(Dialogs.Paragraph(Loc.T("support.kofi"), Theme.Dim, width, 6));
             var kofi = new KeyButton { Text = "Ko-fi", Kind = ButtonKind.Primary, Size = new Size(width, Theme.Dp(40)), Margin = Theme.Pad(0, 0, 0, 16) };
             kofi.AccessibleName = "Ko-fi";
             kofi.Click += delegate { Open(KofiUrl); };
             body.Controls.Add(kofi);
 
-            body.Controls.Add(Line(Loc.T("support.pix"), Theme.Dim, width, 8));
+            body.Controls.Add(Dialogs.Paragraph(Loc.T("support.pix"), Theme.Dim, width, 8));
             qr = LoadQr();
             var code = new QrBox(qr) { Size = Theme.Sz(176, 176), Anchor = AnchorStyles.None, Margin = Theme.Pad(0, 0, 0, 10) };
             code.AccessibleName = Loc.T("support.qr");
@@ -85,7 +85,7 @@ namespace VClicker
             row.Controls.Add(copy, 1, 0);
             body.Controls.Add(row);
 
-            status = Line(string.Empty, Theme.Success, width, 12);
+            status = Dialogs.Paragraph(string.Empty, Theme.Success, width, 12);
             body.Controls.Add(status);
 
             var close = new KeyButton { Text = Loc.T("prof.close"), Kind = ButtonKind.Secondary, Size = Theme.Sz(110, 36), Anchor = AnchorStyles.Right };
@@ -94,12 +94,6 @@ namespace VClicker
             Controls.Add(body);
             KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) Close(); };
         }
-
-        private static Label Line(string text, Color color, int width, int below) => new Label
-        {
-            Text = text, AutoSize = true, MaximumSize = new Size(width, 0), ForeColor = color, BackColor = Theme.Bg,
-            UseMnemonic = false, Margin = Theme.Pad(0, 0, 0, below)
-        };
 
         internal string StatusText => status.Text;
 

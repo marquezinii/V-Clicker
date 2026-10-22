@@ -16,6 +16,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace VClicker
@@ -58,16 +59,10 @@ namespace VClicker
         public static readonly Color Danger = Rgb(0xFF6A5C);
 
         private static readonly Dictionary<string, Font> Fonts = new Dictionary<string, Font>();
-        private static readonly HashSet<string> Families = InstalledFamilies();
+        private static readonly bool HasBahnschrift =
+            FontFamily.Families.Any(f => string.Equals(f.Name, "Bahnschrift", StringComparison.OrdinalIgnoreCase));
 
         private static Color Rgb(int rgb) => Color.FromArgb(0xFF, (rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
-
-        private static HashSet<string> InstalledFamilies()
-        {
-            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (FontFamily family in FontFamily.Families) names.Add(family.Name);
-            return names;
-        }
 
         private static Font Cached(string family, float points)
         {
@@ -89,7 +84,7 @@ namespace VClicker
         /// </summary>
         public static Font Legend(float points, bool bold = false, bool light = false)
         {
-            if (!Families.Contains("Bahnschrift")) return Ui(points, bold);
+            if (!HasBahnschrift) return Ui(points, bold);
             return Cached(bold ? "Bahnschrift SemiBold" : light ? "Bahnschrift Light" : "Bahnschrift", points);
         }
 
@@ -116,8 +111,6 @@ namespace VClicker
         public static Padding Pad(int all) => new Padding(Dp(all));
         public static Padding Pad(int left, int top, int right, int bottom) => new Padding(Dp(left), Dp(top), Dp(right), Dp(bottom));
         public static Size Sz(int width, int height) => new Size(Dp(width), Dp(height));
-
-        public static float Dpi(Control control) => Scale;
 
         public static Color Mix(Color a, Color b, float amount) => Color.FromArgb(
             (int)(a.R + (b.R - a.R) * amount),

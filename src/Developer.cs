@@ -176,7 +176,7 @@ namespace VClicker
 
         /// <summary>Developer Mode's daily file: Logs\v-clicker-YYYY-MM-DD.jsonl next to the settings.</summary>
         public static string DailyPath(string settingsPath) =>
-            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(settingsPath)) ?? ".", "Logs",
+            Path.Combine(ClickSettings.FolderNextTo(settingsPath, "Logs"),
                          "v-clicker-" + DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".jsonl");
 
         /// <param name="fields">Name, value, name, value…: strings, numbers, booleans or null.</param>

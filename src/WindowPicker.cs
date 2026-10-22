@@ -14,15 +14,8 @@ namespace VClicker
         private WindowPicker(string prompt, List<AppWindow> windows)
         {
             Text = Loc.T("picker.title");
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = MinimizeBox = false;
-            ShowInTaskbar = false;
-            StartPosition = FormStartPosition.CenterParent;
-            AutoScaleMode = AutoScaleMode.None;
-            BackColor = Theme.Bg;
-            ForeColor = Theme.Text;
-            Font = Theme.Ui(9.5f);
-            Padding = Theme.Pad(18);
+            Dialogs.Style(this);
+            AutoSize = false; // a fixed size: the list scrolls
             ClientSize = Theme.Sz(480, 400);
 
             var label = new Label
@@ -106,7 +99,6 @@ namespace VClicker
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            Native.StyleTitleBar(Handle);
             Native.SetWindowTheme(list.Handle, "DarkMode_Explorer", null);
         }
 
@@ -147,9 +139,10 @@ namespace VClicker
         {
             if (icons.TryGetValue(path, out Icon icon)) return icon;
             try { icon = Icon.ExtractAssociatedIcon(path); }
-            catch (ArgumentException) { icon = null; }
-            catch (System.IO.IOException) { icon = null; }
-            catch (UnauthorizedAccessException) { icon = null; }
+            catch (Exception error) when (error is ArgumentException || error is System.IO.IOException || error is UnauthorizedAccessException)
+            {
+                icon = null;
+            }
             icons[path] = icon;
             return icon;
         }

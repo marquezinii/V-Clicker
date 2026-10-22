@@ -70,7 +70,12 @@ namespace VClicker
         }
 
         [DllImport("user32.dll", SetLastError = true)]
-        internal static extern uint SendInput(uint count, INPUT[] inputs, int size);
+        private static extern uint SendInput(uint count, INPUT[] inputs, int size);
+
+        private static readonly int InputSize = Marshal.SizeOf(typeof(INPUT));
+
+        /// <summary>Sends the inputs in one go; true when Windows took every one of them.</summary>
+        internal static bool SendInput(params INPUT[] inputs) => SendInput((uint)inputs.Length, inputs, InputSize) == inputs.Length;
 
         [DllImport("user32.dll")]
         internal static extern bool SetCursorPos(int x, int y);

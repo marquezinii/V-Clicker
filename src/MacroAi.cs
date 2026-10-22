@@ -196,10 +196,11 @@ namespace VClicker
             var points = new List<string>();
             foreach (object item in items)
             {
-                MacroStep step = item is Dictionary<string, object> fields && macro.Steps.Count < MaxSteps ? Step(fields) : null;
+                var fields = item as Dictionary<string, object>;
+                MacroStep step = fields != null && macro.Steps.Count < MaxSteps ? Step(fields) : null;
                 if (step == null) { result.Skipped++; continue; }
                 macro.Steps.Add(step);
-                string target = Get((Dictionary<string, object>)item, "target") as string;
+                string target = Get(fields, "target") as string;
                 if (step.NeedsPoint && !string.IsNullOrWhiteSpace(target)) points.Add(macro.Steps.Count + ": " + OneLine(target, 120));
             }
             if (macro.Steps.Count == 0) throw new AiException(Loc.T("ai.err.empty"));

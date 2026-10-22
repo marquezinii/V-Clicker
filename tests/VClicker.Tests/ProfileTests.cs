@@ -25,8 +25,6 @@ namespace VClicker.Tests
             return macro;
         }
 
-        private static IEnumerable<Control> All(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(All(c)));
-
         public static void Run()
         {
             Test("profiles: a profile carries the click settings, never hotkeys or window options", () =>
@@ -145,7 +143,7 @@ namespace VClicker.Tests
                 try
                 {
                     new ClickSettings { StartDelaySeconds = 0, Sounds = false }.Save(ini);
-                    using (var form = new MainForm(ini, new FakeProfileSink()))
+                    using (var form = new MainForm(ini, new NullSink()))
                     {
                         form.StartPosition = FormStartPosition.Manual;
                         form.Location = new Point(-20000, -20000);
@@ -198,7 +196,7 @@ namespace VClicker.Tests
                     saved.Settings.IntervalMs = 50;
                     saved.Settings.Button = ClickButton.Right;
                     Profiles.Save(folder, saved);
-                    using (var form = new MainForm(ini, new FakeProfileSink()))
+                    using (var form = new MainForm(ini, new NullSink()))
                     {
                         form.StartPosition = FormStartPosition.Manual;
                         form.Location = new Point(-20000, -20000);
@@ -235,7 +233,7 @@ namespace VClicker.Tests
                     var saved = new AppProfile { ExeName = "Game.exe", Name = "Game", UsedUtc = DateTime.UtcNow };
                     saved.Settings.IntervalMs = 50;
                     Profiles.Save(Profiles.Folder(ini), saved);
-                    using (var form = new MainForm(ini, new FakeProfileSink()))
+                    using (var form = new MainForm(ini, new NullSink()))
                     {
                         form.StartPosition = FormStartPosition.Manual;
                         form.Location = new Point(-20000, -20000);
@@ -279,11 +277,6 @@ namespace VClicker.Tests
                     Directory.Delete(dir, true);
                 }
             });
-        }
-
-        private sealed class FakeProfileSink : IClickSink
-        {
-            public bool Click(ClickButton button, bool doubleClick, Point? at) => true;
         }
     }
 }

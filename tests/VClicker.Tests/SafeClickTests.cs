@@ -10,9 +10,6 @@ namespace VClicker.Tests
     /// <summary>SafeClick (docs/superpowers/specs/2026-10-21-safeclick-design.md).</summary>
     internal static partial class MacroTests
     {
-        private static System.Collections.Generic.IEnumerable<Control> All(Control root) =>
-            root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(All(c)));
-
         private static T Find<T>(Control root, Func<T, bool> match) where T : Control => All(root).OfType<T>().FirstOrDefault(match);
 
         private static void SafeClickTests()
@@ -254,7 +251,7 @@ namespace VClicker.Tests
 
             Test("studio: the duration limit field writes LimitMinutes and every bar fits the narrowest window", () =>
             {
-                string ini = Path.Combine(Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                string ini = StudioIni();
                 using (var studio = new MacroStudio(null, new ClickSettings(), ini))
                 {
                     Macro sample = Sample();
@@ -326,7 +323,7 @@ namespace VClicker.Tests
 
             Test("review fix: every unsaved macro is its own copy for the safety approval", () =>
             {
-                string ini = Path.Combine(Path.GetTempPath(), "vclicker-studio-" + Guid.NewGuid().ToString("N"), "settings.ini");
+                string ini = StudioIni();
                 var settings = new ClickSettings();
                 using (var studio = new MacroStudio(null, settings, ini))
                 {

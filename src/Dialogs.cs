@@ -27,6 +27,17 @@ namespace VClicker
             };
         }
 
+        /// <summary>A dialog key wide enough for its legend, and never narrower than 100 px.</summary>
+        internal static int ButtonWidth(string text) =>
+            Math.Max(Theme.Dp(100), TextRenderer.MeasureText(text, Theme.Ui(9.5f, true)).Width + Theme.Dp(28));
+
+        /// <summary>A wrapping line of text, at most <paramref name="width"/> wide, with <paramref name="below"/> px under it.</summary>
+        internal static Label Paragraph(string text, Color color, int width, int below) => new Label
+        {
+            Text = text, AutoSize = true, MaximumSize = new Size(width, 0), ForeColor = color, BackColor = Theme.Bg,
+            UseMnemonic = false, Margin = Theme.Pad(0, 0, 0, below)
+        };
+
         /// <returns>The index of the button pressed; -1 if the dialog was closed (or Esc).</returns>
         public static int Ask(IWin32Window owner, string text, params string[] buttons) => Ask(owner, text, ButtonKind.Primary, buttons);
 
@@ -50,7 +61,7 @@ namespace VClicker
                     var button = new KeyButton
                     {
                         Text = buttons[i], Kind = i == 0 ? first : ButtonKind.Secondary,
-                        Size = new Size(Math.Max(Theme.Dp(100), TextRenderer.MeasureText(buttons[i], Theme.Ui(9.5f, true)).Width + Theme.Dp(28)), Theme.Dp(32)),
+                        Size = new Size(ButtonWidth(buttons[i]), Theme.Dp(32)),
                         Margin = Theme.Pad(8, 0, 0, 0)
                     };
                     button.Click += delegate { answer = index; form.Close(); };

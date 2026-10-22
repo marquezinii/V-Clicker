@@ -36,14 +36,12 @@ namespace VClicker
         public SmartTarget Clone() => (SmartTarget)MemberwiseClone();
 
         /// <summary>The image as a new 32-bit bitmap (the caller disposes it); null if it is not a valid target image.</summary>
-        public Bitmap Decode() => DecodeImage(Png);
-
-        internal static Bitmap DecodeImage(byte[] png)
+        public Bitmap Decode()
         {
-            if (png == null || png.Length == 0) return null;
+            if (Png == null || Png.Length == 0) return null;
             try
             {
-                using (var stream = new MemoryStream(png))
+                using (var stream = new MemoryStream(Png))
                 using (var image = new Bitmap(stream))
                 {
                     if (image.Width != image.Height || Array.IndexOf(ImageTarget.Sides, image.Width) < 0) return null;
@@ -377,17 +375,13 @@ namespace VClicker
 
         /// <summary>Macros live in a "Macros" folder next to the settings file (portable mode included).</summary>
         public static string Folder(string settingsPath) =>
-            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(settingsPath)) ?? ".", "Macros");
+            ClickSettings.FolderNextTo(settingsPath, "Macros");
 
         /// <summary>Where the macro called <paramref name="name"/> is saved in <paramref name="folder"/>.</summary>
         public static string PathFor(string folder, string name) => Path.Combine(folder, SafeFileName(name) + Extension);
 
         /// <summary>The macro files in <paramref name="folder"/>; none when it is missing or unreadable.</summary>
-        public static string[] SavedFiles(string folder)
-        {
-            try { return Directory.Exists(folder) ? Directory.GetFiles(folder, "*" + Extension) : new string[0]; }
-            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException) { return new string[0]; }
-        }
+        public static string[] SavedFiles(string folder) => ClickSettings.FilesIn(folder, Extension);
 
         /// <summary>The two paths name the same file.</summary>
         public static bool SamePath(string a, string b) =>
@@ -409,12 +403,7 @@ namespace VClicker
 
         public static void Save(Macro macro, string path)
         {
-            string folder = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
-            string temp = path + ".tmp";
-            File.WriteAllText(temp, Write(macro), new UTF8Encoding(false));
-            if (File.Exists(path)) File.Replace(temp, path, null);
-            else File.Move(temp, path);
+            ClickSettings.WriteFile(path, Write(macro));
         }
 
         public static Macro Load(string path) => Read(File.ReadAllText(path, Encoding.UTF8));
