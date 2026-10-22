@@ -173,6 +173,9 @@ namespace VClicker.Tests
                 string line = MacroStudio.CommandLineFor(@"C:\Apps\V-Clicker.exe", @"C:\Users\Ana O'Neil\Macros\Fim de mês.vcmacro", new[] { "mes" });
                 Equal("$p = Start-Process -Wait -PassThru -FilePath 'C:\\Apps\\V-Clicker.exe' -ArgumentList '--macro','\"C:\\Users\\Ana O''Neil\\Macros\\Fim de mês.vcmacro\"','--var','mes=','--exit-when-done'; $p.ExitCode",
                       line, "command");
+                // PowerShell also ends a single-quoted string at the typographic quotes: each is doubled too.
+                string curly = MacroStudio.CommandLineFor(@"C:\V.exe", @"C:\M’; calc; ‘x.vcmacro", new string[0]);
+                True(curly.Contains("M’’; calc; ‘‘x"), curly);
             });
 
             Test("command line: a hold-mode profile is refused (nothing holds the hotkey)", () =>
