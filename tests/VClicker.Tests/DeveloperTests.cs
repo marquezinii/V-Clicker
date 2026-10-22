@@ -168,6 +168,34 @@ namespace VClicker.Tests
                 finally { Directory.Delete(dir, true); }
             });
 
+            Test("copy command: a PowerShell line that waits and keeps the exit code, quotes escaped", () =>
+            {
+                string line = MacroStudio.CommandLineFor(@"C:\Apps\V-Clicker.exe", @"C:\Users\Ana O'Neil\Macros\Fim de mês.vcmacro", new[] { "mes" });
+                Equal("$p = Start-Process -Wait -PassThru -FilePath 'C:\\Apps\\V-Clicker.exe' -ArgumentList '--macro','\"C:\\Users\\Ana O''Neil\\Macros\\Fim de mês.vcmacro\"','--var','mes=','--exit-when-done'; $p.ExitCode",
+                      line, "command");
+            });
+
+            Test("command line: a hold-mode profile is refused (nothing holds the hotkey)", () =>
+            {
+                string dir = Path.Combine(Path.GetTempPath(), "vclicker-cli-" + Guid.NewGuid().ToString("N"));
+                string ini = Path.Combine(dir, "settings.ini");
+                Directory.CreateDirectory(dir);
+                try
+                {
+                    new ClickSettings { Sounds = false }.Save(ini);
+                    var held = new AppProfile { ExeName = "Game.exe", Name = "Game", UsedUtc = DateTime.UtcNow };
+                    held.Settings.HoldMode = true;
+                    Profiles.Save(Profiles.Folder(ini), held);
+                    using (var form = new MainForm(ini, new NullClickSink()) { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) })
+                    {
+                        IntPtr handle = form.Handle;
+                        Equal(ExitCodes.BadArguments, form.RunCommand(CommandLine.Parse(new[] { "--profile", "Game" })), "refused");
+                        True(!form.ClickerBusy, "nothing started");
+                    }
+                }
+                finally { Directory.Delete(dir, true); }
+            });
+
             Test("command line: a missing macro, profile or variable value is exit code 2", () =>
             {
                 string dir = Path.Combine(Path.GetTempPath(), "vclicker-cli-" + Guid.NewGuid().ToString("N"));

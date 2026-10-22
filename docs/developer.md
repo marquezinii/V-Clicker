@@ -25,6 +25,14 @@ impactantes ainda não aprovada (não há como pulá-la pela linha de comando) e
 
 Com o V-Clicker **já aberto**, a linha de comando não age e sai com o código 3: feche-o antes.
 
+Para rodar sem ninguém olhando, lembre que algumas situações **perguntam na tela** e esperam resposta: a revisão de
+segurança (macro com ação impactante ainda não aprovada), a escolha da janela quando o aplicativo tem várias abertas e
+o aviso de tamanho de janela diferente do gravado. Cancelar qualquer uma é o código 4. Um perfil no modo **Segurar** é
+recusado (código 2): pela linha de comando ninguém segura o atalho.
+
+**Copiar comando** (Macro Studio, com o modo desenvolvedor ligado) copia uma linha de PowerShell que já espera o fim e
+mostra o código de saída.
+
 O V-Clicker é um aplicativo de janela: para esperar o fim num script, use `start /wait` (cmd) ou
 `Start-Process -Wait -PassThru` (PowerShell). Mensagens de erro vão para a saída de erro de quem chamou.
 

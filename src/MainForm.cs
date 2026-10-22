@@ -1199,6 +1199,8 @@ namespace VClicker
                 AppProfile profile = Profiles.List(profileFolder).FirstOrDefault(p =>
                     p.ExeName.Equals(command.Profile, StringComparison.OrdinalIgnoreCase) || p.Name.Equals(command.Profile, StringComparison.OrdinalIgnoreCase));
                 if (profile == null) return CommandFailed(ExitCodes.BadArguments, Loc.F("cli.noProfile", command.Profile));
+                // Hold mode clicks while the hotkey is held: nothing holds it here, so it would click until F8.
+                if (profile.Settings.HoldMode) return CommandFailed(ExitCodes.BadArguments, Loc.F("cli.hold", profile.Name));
                 UseLockApp(new AppWindow { ExeName = profile.ExeName, DisplayName = profile.Name });
                 StartClicking(false);
                 if (engine.Phase == EnginePhase.Idle) return CommandFailed(ExitCodes.NotStarted, null); // the display says why

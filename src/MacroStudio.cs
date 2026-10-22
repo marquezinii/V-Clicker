@@ -1619,9 +1619,7 @@ namespace VClicker
                 return;
             }
             Dictionary<string, string> defaults = MacroVariables.Defaults(macro);
-            string text = "\"" + Application.ExecutablePath + "\" --macro \"" + path + "\"" +
-                          string.Concat(MacroVariables.Used(macro).Where(n => !defaults.ContainsKey(n)).Select(n => " --var " + n + "=")) +
-                          " --exit-when-done";
+            string text = CommandLineFor(Application.ExecutablePath, path, MacroVariables.Used(macro).Where(n => !defaults.ContainsKey(n)));
             try
             {
                 Clipboard.SetText(text);
@@ -1631,6 +1629,19 @@ namespace VClicker
             {
                 SetMessage(text, Theme.Dim); // the clipboard is busy: show it to copy by hand
             }
+        }
+
+        /// <summary>
+        /// A PowerShell line that runs the macro, waits for it (V-Clicker is a window app) and shows the exit code.
+        /// Each argument is single-quoted ('' inside); the macro path is also double-quoted, as Start-Process joins them.
+        /// </summary>
+        internal static string CommandLineFor(string exe, string file, IEnumerable<string> variables)
+        {
+            string Single(string text) => "'" + text.Replace("'", "''") + "'";
+            IEnumerable<string> args = new[] { "--macro", "\"" + file + "\"" }
+                .Concat(variables.SelectMany(n => new[] { "--var", n + "=" }))
+                .Concat(new[] { "--exit-when-done" });
+            return "$p = Start-Process -Wait -PassThru -FilePath " + Single(exe) + " -ArgumentList " + string.Join(",", args.Select(Single)) + "; $p.ExitCode";
         }
 
         /// <summary>Why a click was not made, from the last look for its target.</summary>
