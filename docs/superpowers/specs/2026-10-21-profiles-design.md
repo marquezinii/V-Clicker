@@ -23,8 +23,8 @@ importado em outro computador.
    (**decisão**: uma pergunta a cada troca atrapalharia quem joga).
 3. **Window Lock desligado:** vale a configuração global (a última usada), como antes.
 4. **Nunca durante uma execução.** Um perfil só é carregado com o V-Clicker parado. Os controles que carregam perfis
-   já ficam desativados durante uma execução; importar o perfil do aplicativo em uso só o grava, sem aplicar, se
-   houver uma execução.
+   já ficam desativados durante uma execução, inclusive o link "Perfis" (uma importação durante a execução não
+   poderia ser aplicada e seria sobrescrita pela configuração em uso).
 5. **O que entra no perfil:** velocidade (e a forma de editá-la, CPS ou intervalo), variação aleatória, botão, tipo,
    repetições, posição (cursor ou fixa, com X/Y), atraso inicial, modo do atalho (alternar/segurar) e o que fazer
    quando o aplicativo perde o foco. São as "posições" e "condições de execução" do pedido.

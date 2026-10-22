@@ -125,6 +125,41 @@ namespace VClicker.Tests
                 }
             });
 
+            Test("profiles: a saved macro that is the same macro written differently is not duplicated", () =>
+            {
+                string dir = TempDir();
+                try
+                {
+                    Macro farm = MacroFor("Game.exe", "Farm", 10);
+                    // As Windows tools or an older version may leave it: CRLF and blank lines.
+                    File.WriteAllText(Path.Combine(dir, "Farm.vcmacro"), MacroFile.Write(farm).Replace("\n", "\r\n") + "\r\n\r\n");
+                    Equal(0, Profiles.AddMacros(dir, new List<Macro> { farm }), "already there");
+                }
+                finally { Directory.Delete(dir, true); }
+            });
+
+            Test("main window: the Profiles window cannot be opened during a run", () =>
+            {
+                string dir = TempDir();
+                string ini = Path.Combine(dir, "settings.ini");
+                try
+                {
+                    new ClickSettings { StartDelaySeconds = 0, Sounds = false }.Save(ini);
+                    using (var form = new MainForm(ini, new FakeProfileSink()))
+                    {
+                        form.StartPosition = FormStartPosition.Manual;
+                        form.Location = new Point(-20000, -20000);
+                        IntPtr handle = form.Handle;
+                        LinkLabel link = All(form).OfType<LinkLabel>().First(l => l.Text == Loc.T("link.profiles"));
+                        True(link.Enabled, "available when stopped");
+                        form.Toggle(false);
+                        True(!link.Enabled, "not while clicking: an import could not take effect and would be overwritten");
+                        form.Engine.Stop();
+                    }
+                }
+                finally { Directory.Delete(dir, true); }
+            });
+
             Test("profiles: an import skips unreadable macros and macros of another app", () =>
             {
                 string good = MacroFile.Write(MacroFor("Game.exe", "Farm", 10));

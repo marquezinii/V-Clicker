@@ -180,7 +180,11 @@ namespace VClicker
         }
 
         /// <summary>The saved macros of the app <paramref name="exe"/> (unreadable files are left out).</summary>
-        public static List<Macro> MacrosOf(string macroFolder, string exe)
+        public static List<Macro> MacrosOf(string macroFolder, string exe) =>
+            AllMacros(macroFolder).Where(m => m.ExeName.Equals(exe, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        /// <summary>Every readable saved macro.</summary>
+        public static List<Macro> AllMacros(string macroFolder)
         {
             var found = new List<Macro>();
             string[] files;
@@ -190,8 +194,7 @@ namespace VClicker
             {
                 try
                 {
-                    Macro macro = MacroFile.Load(file);
-                    if (macro.ExeName.Equals(exe, StringComparison.OrdinalIgnoreCase)) found.Add(macro);
+                    found.Add(MacroFile.Load(file));
                 }
                 catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is FormatException) { }
             }
@@ -218,7 +221,7 @@ namespace VClicker
                 bool duplicate = false;
                 for (int n = 2; File.Exists(file); n++)
                 {
-                    if (SameText(file, content)) { duplicate = true; break; }
+                    if (SameMacro(file, content)) { duplicate = true; break; }
                     file = Path.Combine(macroFolder, stem + " (" + n.ToString(CultureInfo.InvariantCulture) + ")" + MacroFile.Extension);
                 }
                 if (duplicate) continue;
@@ -228,10 +231,11 @@ namespace VClicker
             return added;
         }
 
-        private static bool SameText(string file, string content)
+        /// <summary>The file holds this macro, however it is laid out (line ends, blank lines, an older writer).</summary>
+        private static bool SameMacro(string file, string content)
         {
-            try { return File.ReadAllText(file, Encoding.UTF8).Replace("\r\n", "\n") == content; }
-            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException) { return false; }
+            try { return MacroFile.Write(MacroFile.Load(file)) == content; }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is FormatException) { return false; }
         }
 
         /// <summary>"15 CPS · left": what the profile clicks, in a few words.</summary>

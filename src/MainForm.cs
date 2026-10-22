@@ -784,6 +784,7 @@ namespace VClicker
                 tips.SetToolTip(profilesLink, Loc.T("link.profiles.tip"));
             });
             profilesLink.LinkClicked += delegate { OpenProfiles(); };
+            lockable.Add(profilesLink); // an import during a run could not take effect, and the run's settings would overwrite it
             adminLink.Margin = Theme.Pad(18, 0, 0, 0);
 
             Row(footer, credits, profilesLink, adminLink);

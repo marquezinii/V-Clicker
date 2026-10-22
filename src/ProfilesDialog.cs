@@ -115,11 +115,12 @@ namespace VClicker
         private void Reload(string select = null)
         {
             profiles = Profiles.List(folder);
+            List<Macro> saved = Profiles.AllMacros(macroFolder); // read once, not once per profile
             list.BeginUpdate();
             list.Items.Clear();
             foreach (AppProfile profile in profiles)
             {
-                int macros = Profiles.MacrosOf(macroFolder, profile.ExeName).Count;
+                int macros = saved.Count(m => m.ExeName.Equals(profile.ExeName, StringComparison.OrdinalIgnoreCase));
                 string count = macros == 0 ? string.Empty : " · " + (macros == 1 ? Loc.T("prof.macros1") : Loc.F("prof.macrosN", macros));
                 list.Items.Add(profile.Name + " — " + Profiles.Summary(profile.Settings) + count);
             }
@@ -207,8 +208,9 @@ namespace VClicker
             int added;
             try
             {
-                if (!Profiles.Save(folder, profile)) throw new IOException(profile.ExeName + Profiles.Extension);
+                // Macros first: if one cannot be written, the profile in use is not replaced either.
                 added = Profiles.AddMacros(macroFolder, macros);
+                if (!Profiles.Save(folder, profile)) throw new IOException(profile.ExeName + Profiles.Extension);
             }
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
             {
