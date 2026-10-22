@@ -58,6 +58,8 @@ namespace VClicker
         public bool MinimizeToTray;
         /// <summary>"auto", "pt" or "en".</summary>
         public string Language = "auto";
+        /// <summary>false = the simple window (speed, button, hotkeys). A new install starts simple; see <see cref="Load"/>.</summary>
+        public bool Advanced = true;
 
         public const int MaxApprovals = 200;
         /// <summary>
@@ -144,7 +146,9 @@ namespace VClicker
             var settings = new ClickSettings();
             try
             {
+                // No file: a new install, which starts simple. A file without the key is an older version: advanced.
                 if (File.Exists(path)) settings.Apply(ReadPairs(File.ReadAllLines(path)));
+                else settings.Advanced = false;
             }
             catch (IOException) { settings = new ClickSettings { readFailed = true }; }
             catch (UnauthorizedAccessException) { settings = new ClickSettings { readFailed = true }; }
@@ -201,6 +205,7 @@ namespace VClicker
             yield return "AlwaysOnTop=" + AlwaysOnTop;
             yield return "MinimizeToTray=" + MinimizeToTray;
             yield return "Language=" + Language;
+            yield return "Advanced=" + Advanced;
             yield return "ApprovedMacros=" + string.Join(",", ApprovedMacros);
         }
 
@@ -247,6 +252,7 @@ namespace VClicker
             AlwaysOnTop = Bool(pairs, "AlwaysOnTop", AlwaysOnTop);
             MinimizeToTray = Bool(pairs, "MinimizeToTray", MinimizeToTray);
             if (pairs.TryGetValue("Language", out string language)) Language = language.ToLowerInvariant();
+            Advanced = Bool(pairs, "Advanced", Advanced);
             if (pairs.TryGetValue("ApprovedMacros", out string approved))
                 ApprovedMacros = approved.Split(',').Select(k => k.Trim()).Where(k => k.Length > 0).ToList();
         }

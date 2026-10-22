@@ -58,8 +58,9 @@ outra janela do mesmo processo ou executável e continuar nela.
 - **Profiles V2:** implementado ([design](superpowers/specs/2026-10-21-profiles-design.md)): perfis automáticos por
   aplicativo do Window Lock, exportar e importar com as macros do aplicativo; atalhos ficam globais.
 - **Profiles, depois da V2:** macro preferida por aplicativo no Studio e atalho global para executar uma macro.
-- **Próximos:** Interface adaptativa, Developer Mode, AI Macro Builder (exige decidir sobre a promessa de "sem
-  rede").
+- **Interface adaptativa:** implementada ([design](superpowers/specs/2026-10-21-adaptive-interface-design.md)):
+  modo simples (velocidade, botão do mouse, atalhos) e avançado; instalações novas começam no simples.
+- **Próximos:** Developer Mode, AI Macro Builder (exige decidir sobre a promessa de "sem rede").
 
 ## Fase de produtividade
 

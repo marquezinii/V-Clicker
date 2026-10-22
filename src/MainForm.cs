@@ -40,7 +40,11 @@ namespace VClicker
         private KeyButton startButton, captureButton;
         private NumberField fCps, fHours, fMinutes, fSeconds, fMillis, fJitter, fRepeat, fX, fY, fDelay;
         private Segmented segLanguage, segSpeed, segButton, segType, segRepeat, segPosition, segMode;
-        private Control cpsRow, intervalRow;
+        private Control cpsRow, intervalRow, jitterRow, quickButtonRow, rightColumn;
+        private Grid root;
+        private Segmented segLevel, segQuickButton;
+        private Label alsoNote;
+        private LinkLabel profilesLink;
         private HotkeyBox hkToggle, hkStop, hkCapture;
         private LedCheck chkTop, chkTray, chkSounds, chkLock, chkHud;
         private Segmented segLockMode, segHudCorner;
@@ -107,6 +111,7 @@ namespace VClicker
 
             ApplySettingsToUi();
             ApplyLanguage();
+            ApplyLevel();
             ApplyWindowOptions();
             uiTimer.Start();
         }
@@ -256,7 +261,7 @@ namespace VClicker
         /// </summary>
         private void BuildLayout()
         {
-            var root = new Grid
+            root = new Grid
             {
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
@@ -274,9 +279,9 @@ namespace VClicker
             root.Controls.Add(header, 0, 0);
             root.SetColumnSpan(header, 2);
             root.Controls.Add(BuildLeftColumn(), 0, 1);
-            Control right = BuildRightColumn();
-            right.Margin = Theme.Pad(28, 0, 0, 0);
-            root.Controls.Add(right, 1, 1);
+            rightColumn = BuildRightColumn();
+            rightColumn.Margin = Theme.Pad(28, 0, 0, 0);
+            root.Controls.Add(rightColumn, 1, 1);
             Control footer = BuildFooter();
             root.Controls.Add(footer, 0, 2);
             root.SetColumnSpan(footer, 2);
@@ -342,6 +347,19 @@ namespace VClicker
         {
             Grid column = Table("100%");
 
+            // Two levels (docs/superpowers/specs/2026-10-21-adaptive-interface-design.md), always in this place.
+            segLevel = Seg("level.simple", "level.advanced");
+            segLevel.AccessibleName = "Interface level";
+            Localize(() => tips.SetToolTip(segLevel, Loc.T("level.tip")));
+            segLevel.SelectedChanged += delegate
+            {
+                if (loading) return;
+                settings.Advanced = segLevel.SelectedIndex == 1;
+                SaveSettings();
+                ApplyLevel();
+            };
+            FullRow(column, segLevel);
+
             display = new StatusDisplay { Dock = DockStyle.Fill, Height = Theme.Dp(164), Margin = Theme.Pad(0, 0, 0, 12) };
             Localize(() => tips.SetToolTip(display, Loc.T("stat.note.tip")));
             Row(column, display);
@@ -355,7 +373,30 @@ namespace VClicker
             Row(column, startButton);
 
             BuildSpeed(column);
+
+            // Simple mode only: the mouse button, the same setting as the advanced "Button" keys.
+            Grid quick = Table(LeftLabels, "100%");
+            segQuickButton = Seg("button.left", "button.middle", "button.right");
+            segQuickButton.AccessibleName = "Mouse button (simple)";
+            lockable.Add(segQuickButton);
+            segQuickButton.SelectedChanged += delegate
+            {
+                segButton.SetSelectedSilently(segQuickButton.SelectedIndex);
+                OnConfigChanged(this, EventArgs.Empty);
+            };
+            Row(quick, RowLabel("quick.button"), segQuickButton);
+            quickButtonRow = quick;
+            FullRow(column, quick);
+
             BuildHotkeys(column);
+
+            // Simple mode only: what the advanced settings still do while they are out of sight.
+            alsoNote = new Label
+            {
+                AutoSize = true, Font = Theme.Ui(9f), ForeColor = Theme.Dim, BackColor = Theme.Bg, UseMnemonic = false,
+                MaximumSize = new Size(Theme.Dp(372), 0), Margin = Theme.Pad(0, 6, 0, 0)
+            };
+            FullRow(column, alsoNote);
             AddFiller(column);
             return column;
         }
@@ -446,17 +487,18 @@ namespace VClicker
             };
             FullRow(column, rateLabel);
 
-            Grid jitterRow = Table(LeftLabels, "100%");
+            Grid jitter = Table(LeftLabels, "100%");
             fJitter = Num(0, 50, "Random variation percent", "%");
             fJitter.Anchor = AnchorStyles.Left;
             fJitter.Dock = DockStyle.None;
             fJitter.Size = Theme.Sz(110, RowHeight);
             fJitter.ValueChanged += OnConfigChanged;
             Label jitterLabel = RowLabel("jitter");
-            Row(jitterRow, jitterLabel, fJitter);
+            Row(jitter, jitterLabel, fJitter);
             Localize(() => tips.SetToolTip(fJitter, Loc.T("jitter.tip")));
             Localize(() => tips.SetToolTip(jitterLabel, Loc.T("jitter.tip")));
-            FullRow(column, jitterRow);
+            jitterRow = jitter;
+            FullRow(column, jitter);
         }
 
         private Label UnitLabel(string key)
@@ -772,7 +814,7 @@ namespace VClicker
                 });
             }
 
-            var profilesLink = new LinkLabel
+            profilesLink = new LinkLabel
             {
                 AutoSize = true, Font = Theme.Legend(9f), BackColor = Theme.Bg, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, UseCompatibleTextRendering = true,
                 LinkColor = Theme.Text, ActiveLinkColor = Theme.Cap, VisitedLinkColor = Theme.Text,
@@ -850,6 +892,8 @@ namespace VClicker
             segSpeed.SetSelectedSilently(settings.SpeedInCps ? 0 : 1);
             fJitter.Value = settings.JitterPercent;
             segButton.SetSelectedSilently((int)settings.Button);
+            segQuickButton.SetSelectedSilently((int)settings.Button);
+            segLevel.SetSelectedSilently(settings.Advanced ? 1 : 0);
             segType.SetSelectedSilently(settings.DoubleClick ? 1 : 0);
             segRepeat.SetSelectedSilently(settings.RepeatCount > 0 ? 1 : 0);
             fRepeat.Value = settings.RepeatCount > 0 ? settings.RepeatCount : 100;
@@ -873,6 +917,47 @@ namespace VClicker
             loading = false;
             ShowSpeedMode();
             UpdateEnabledState();
+            UpdateAlsoNote();
+        }
+
+        /// <summary>
+        /// Simple: one column (speed, mouse button, hotkeys). Advanced: everything. Hiding a control never changes what
+        /// it does: the settings stay in effect and <see cref="UpdateAlsoNote"/> says so.
+        /// </summary>
+        private void ApplyLevel()
+        {
+            bool advanced = settings.Advanced;
+            SuspendLayout();
+            rightColumn.Visible = advanced;
+            root.ColumnStyles[1].Width = advanced ? Theme.Dp(380) : 0;
+            studioButton.Visible = segSpeed.Visible = jitterRow.Visible = profilesLink.Visible = adminLink.Visible = advanced;
+            quickButtonRow.Visible = !advanced;
+            segQuickButton.SetSelectedSilently((int)settings.Button);
+            ShowSpeedMode();
+            UpdateAlsoNote();
+            ResumeLayout(true);
+            if (!AutoSize)
+            {
+                // FitToScreen capped the previous layout: size to the new content, then fit again.
+                AutoScroll = false;
+                AutoSize = true;
+            }
+            if (Visible) FitToScreen(Screen.FromControl(this).WorkingArea);
+        }
+
+        /// <summary>Simple mode: the advanced settings that are not at their defaults, in a few words.</summary>
+        private void UpdateAlsoNote()
+        {
+            var active = new List<string>();
+            if (settings.WindowLock && settings.LockExe.Length > 0) active.Add(Loc.F("also.lock", settings.LockName));
+            if (settings.UseFixedPosition) active.Add(Loc.F("also.fixed", settings.X, settings.Y));
+            if (settings.RepeatCount > 0) active.Add(Loc.F("also.repeat", settings.RepeatCount.ToString("N0", CultureInfo.CurrentCulture)));
+            if (settings.DoubleClick) active.Add(Loc.T("also.double"));
+            if (settings.HoldMode) active.Add(Loc.T("also.hold"));
+            if (settings.JitterPercent > 0) active.Add(Loc.F("also.jitter", settings.JitterPercent));
+            if (settings.StartDelaySeconds > 1) active.Add(Loc.F("also.delay", settings.StartDelaySeconds));
+            alsoNote.Text = Loc.F("also.intro", string.Join(" · ", active));
+            alsoNote.Visible = !settings.Advanced && active.Count > 0;
         }
 
         private void ReadUi()
@@ -921,6 +1006,7 @@ namespace VClicker
             UpdateEnabledState();
             ApplyWindowOptions();
             UpdateStartButton();
+            UpdateAlsoNote();
         }
 
         private void OnIntervalFieldChanged(object sender, EventArgs e)
@@ -955,9 +1041,12 @@ namespace VClicker
             loading = wasLoading;
         }
 
+        /// <summary>The speed is edited as CPS (the simple window always does).</summary>
+        private bool CpsView => !settings.Advanced || segSpeed.SelectedIndex == 0;
+
         private void ShowSpeedMode()
         {
-            bool cps = segSpeed.SelectedIndex == 0;
+            bool cps = CpsView;
             cpsRow.Visible = cps;
             intervalRow.Visible = !cps;
             UpdateRateLabel();
@@ -967,7 +1056,7 @@ namespace VClicker
         {
             double perSecond = Interval.ClicksPerSecond(settings.IntervalMs);
             string text;
-            if (segSpeed.SelectedIndex == 0)
+            if (CpsView)
                 text = perSecond < Interval.MinCps - 1e-9
                     ? Loc.T("rate.belowCps")
                     : Loc.F("rate.ms", settings.IntervalMs.ToString(settings.IntervalMs >= 100 ? "0.#" : "0.##", CultureInfo.CurrentCulture));
@@ -1015,6 +1104,7 @@ namespace VClicker
             trayExit.Text = Loc.T("tray.exit");
             UpdateRateLabel();
             UpdateStartButton();
+            UpdateAlsoNote();
             ShowHint();
             RefreshStats();
             PerformLayout();

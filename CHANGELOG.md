@@ -22,6 +22,11 @@ All notable changes to this project are documented here. The format follows
   monogram and brand art). The previous cyan/violet brand files were removed.
 
 ### Added
+- **Simple and advanced interface** (see `docs/superpowers/specs/2026-10-21-adaptive-interface-design.md`): a
+  Simple | Advanced switch at the top of the main window. Simple is one narrow column (display, Start, speed in CPS
+  with the presets, mouse button, hotkeys); Advanced is the full window. New installs start simple; existing settings
+  files without the new `Advanced=` key stay advanced. Hidden settings keep working, and the simple window lists the
+  ones that are not at their defaults ("Also in effect: …"). Switching never starts or stops a run.
 - **Profiles per app** (see `docs/superpowers/specs/2026-10-21-profiles-design.md`): with the Window Lock on, the
   click settings (speed, jitter, button, type, repeats, position, start delay, hotkey mode, focus-loss mode) are kept
   per app executable in `Profiles\<exe>.vcprofile` and loaded when the app is chosen again, or when the lock is turned

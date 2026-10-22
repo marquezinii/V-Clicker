@@ -71,7 +71,8 @@ them.
    else.
 2. Honest instruments: show what is measured, never imply more.
 3. Light and fast: small window, instant response, no motion that delays a task.
-4. Advanced power stays out of the way: productivity features live in the Studio.
+4. Advanced power stays out of the way: productivity features live in the Studio, and the main window has a Simple
+   level (speed, mouse button, hotkeys) that new installs start in; hidden settings still apply and are listed.
 5. Must not read as gamer RGB, as a generic template, or as a heavy app.
 
 ## Accessibility & Inclusion

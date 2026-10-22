@@ -19,6 +19,7 @@ A single `.exe`: no installer, no telemetry, no network.
 
 ## Features
 
+- **Simple or advanced**: the switch at the top toggles between a lean window (speed, mouse button and hotkeys, for anyone who just wants to press F6) and the full one. New installs start simple; whatever was set up in Advanced stays in effect, and the simple window says so in one line ("Also in effect: Window Lock (Roblox) · fixed spot…").
 - **Real speed** – intervals from **1 ms** up to 24 h (up to ~1000 clicks/s, depending on the target program), using an absolute schedule that never accumulates lag plus a high-resolution wait.
 - **Speed in CPS** (clicks per second, one decimal) or as an **interval in h / min / s / ms**: both edit the same speed, with no rounding (15 CPS = 66.667 ms). Presets `5`, `10`, `15`, `20` and `50 CPS`.
 - **Window Lock**: pick an app (e.g. Roblox) and V-Clicker only clicks while it is in front. On Alt+Tab it **pauses and resumes by itself** when you come back (or stops, if you prefer). F6 only starts with the app in front; the *Start* button brings it to the front. It stops for good if the window closes, if a pause lasts over 5 minutes, or if the PC is locked or goes to sleep.
@@ -98,7 +99,7 @@ src/             the app (WinForms, .NET Framework 4.8, no third-party dependenc
   Settings.cs      .ini settings with validation and a safe fallback
   MainForm.cs      main window;  Controls.cs / Theme.cs / Icons.cs  keys, LEDs, display and drawn icons (DESIGN.md)
   Loc.cs           Portuguese and English strings
-tests/           dependency-free test runner (127 unit tests + 8 integration tests)
+tests/           dependency-free test runner (132 unit tests + 8 integration tests)
 assets/          app icon and brand identity (assets/brand: icon, logos and brand art)
 docs/            screenshots
 ```
