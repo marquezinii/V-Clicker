@@ -1079,7 +1079,8 @@ namespace VClicker
             string text;
             if (CpsView)
                 text = perSecond < Interval.MinCps - 1e-9
-                    ? Loc.T("rate.belowCps")
+                    // Simple has no Interval mode to point at: say the speed as it is.
+                    ? settings.Advanced ? Loc.T("rate.belowCps") : Loc.F("rate.every", (1 / perSecond).ToString("0.#", CultureInfo.CurrentCulture))
                     : Loc.F("rate.ms", settings.IntervalMs.ToString(settings.IntervalMs >= 100 ? "0.#" : "0.##", CultureInfo.CurrentCulture));
             else
                 text = perSecond >= 1
@@ -1198,6 +1199,8 @@ namespace VClicker
                 AppProfile profile = Profiles.List(profileFolder).FirstOrDefault(p =>
                     p.ExeName.Equals(command.Profile, StringComparison.OrdinalIgnoreCase) || p.Name.Equals(command.Profile, StringComparison.OrdinalIgnoreCase));
                 if (profile == null) return CommandFailed(ExitCodes.BadArguments, Loc.F("cli.noProfile", command.Profile));
+                // Hold mode clicks while the hotkey is held: nothing holds it here, so it would click until F8.
+                if (profile.Settings.HoldMode) return CommandFailed(ExitCodes.BadArguments, Loc.F("cli.hold", profile.Name));
                 UseLockApp(new AppWindow { ExeName = profile.ExeName, DisplayName = profile.Name });
                 StartClicking(false);
                 if (engine.Phase == EnginePhase.Idle) return CommandFailed(ExitCodes.NotStarted, null); // the display says why

@@ -182,6 +182,21 @@ namespace VClicker.Tests
                 finally { File.Delete(ini); }
             });
 
+            Test("simple mode: a speed below 0.1 CPS is shown as it is, not pointed at the hidden Interval mode", () =>
+            {
+                string ini = TempIni();
+                try
+                {
+                    new ClickSettings { Advanced = false, Language = "en", IntervalMs = 20000 }.Save(ini); // 0.05 CPS
+                    using (MainForm form = Open(ini))
+                    {
+                        True(All(form).OfType<Label>().Any(l => l.Visible && l.Text == Loc.F("rate.every", "20")), "1 click every 20 s; labels: " + string.Join(" | ", All(form).OfType<Label>().Where(l => l.Visible).Select(l => l.Text)));
+                        True(!All(form).OfType<Label>().Any(l => l.Visible && l.Text == Loc.T("rate.belowCps")), "no pointer to a hidden control");
+                    }
+                }
+                finally { File.Delete(ini); }
+            });
+
             Test("simple mode: Start still clicks", () =>
             {
                 string ini = TempIni();
