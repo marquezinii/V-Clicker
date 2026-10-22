@@ -4,7 +4,10 @@ Itens decididos, mas fora da entrega atual. Cada um ganha planejamento próprio 
 
 ## Próxima rodada
 
-### Perfis automáticos por aplicativo (V2, depois do Window Lock)
+### Perfis automáticos por aplicativo (V2, depois do Window Lock): implementado
+
+[Design](superpowers/specs/2026-10-21-profiles-design.md). As regras abaixo valeram como base; a exportação e a
+importação (com as macros do aplicativo) entraram a pedido, e os atalhos continuam fora do perfil.
 
 O V-Clicker lembra as configurações de clique de cada aplicativo vinculado no Window Lock, identificado pelo executável
 (o mesmo que o Window Lock já persiste).
@@ -52,9 +55,11 @@ outra janela do mesmo processo ou executável e continuar nela.
   opcional de duração.
 - **SafeClick, depois da V1:** camada de marcadores sobre a janela real do aplicativo (exige lidar com
   compatibilidade, posicionamento e foco); ficou fora da V1 por decisão do usuário.
-- **Próximos:** Profiles (perfis automáticos por aplicativo; o conflito com exportar/importar e com atalhos no perfil
-  será decidido no design dele), Interface adaptativa, Developer Mode, AI Macro Builder (exige decidir sobre a
-  promessa de "sem rede").
+- **Profiles V2:** implementado ([design](superpowers/specs/2026-10-21-profiles-design.md)): perfis automáticos por
+  aplicativo do Window Lock, exportar e importar com as macros do aplicativo; atalhos ficam globais.
+- **Profiles, depois da V2:** macro preferida por aplicativo no Studio e atalho global para executar uma macro.
+- **Próximos:** Interface adaptativa, Developer Mode, AI Macro Builder (exige decidir sobre a promessa de "sem
+  rede").
 
 ## Fase de produtividade
 

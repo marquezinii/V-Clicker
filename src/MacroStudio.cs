@@ -1138,6 +1138,9 @@ namespace VClicker
             public override string ToString() => Name;
         }
 
+        /// <summary>Macro files changed outside the Studio (a profile import).</summary>
+        internal void ReloadMacroList() => RefreshMacroList();
+
         private void RefreshMacroList()
         {
             loadingUi = true;

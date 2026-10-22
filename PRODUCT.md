@@ -26,7 +26,8 @@ what Windows accepted (not what the game recognised), and stops and explains ins
 ## Positioning
 
 - Real precision: 1 ms to 24 h, absolute schedule, CPS and h/min/s/ms editing the same exact speed.
-- Window Lock: clicks only while the chosen app is in front; pauses and resumes on Alt+Tab.
+- Window Lock: clicks only while the chosen app is in front; pauses and resumes on Alt+Tab. Each app keeps its own
+  click settings (profiles), loaded when it is chosen again; export/import with the app's macros.
 - Macro Studio with "wait until" conditions and Smart Target (find the button by name or appearance, never click on
   ambiguity), and SafeClick: see where a macro would click before running it, without sending anything.
 - One `.exe`, no installer, no telemetry, no network, open source (MIT).
@@ -41,7 +42,7 @@ glance: running or not, how fast, what F6 will do.
 
 Must keep every existing function: CPS / interval speed, presets, jitter, button, single/double, repeat forever or N
 times, toggle/hold mode, start delay, cursor or fixed position with capture, Window Lock (app picker, pause or stop on
-focus loss), configurable hotkeys, always on top, tray, sounds, HUD and its corner, PT/EN, restart as admin, GitHub
+focus loss, per-app profiles with export/import), configurable hotkeys, always on top, tray, sounds, HUD and its corner, PT/EN, restart as admin, GitHub
 link, live stats (clicks, requested CPS, sent CPS, time), notices. Macro Studio: record, run, stop, repetitions,
 macro list (new, rename, delete, save), step list and step editor, long-pause optimizer, conditions and smart target
 dialogs, undo/redo. SafeClick: simulate (passive, over a window capture), safety review before impactful

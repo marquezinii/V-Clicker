@@ -21,6 +21,7 @@ namespace VClicker.Tests
             WindowLockTests();
             MiscTests();
             MacroTests.Run();
+            ProfileTests.Run();
         }
 
         // ------------------------------------------------------------------ hotkeys
