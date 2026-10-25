@@ -22,6 +22,9 @@ All notable changes to this project are documented here. The format follows
   monogram and brand art). The previous cyan/violet brand files were removed.
 
 ### Added
+- **Microsoft Store package** (see `docs/microsoft-store.md`): `scripts/msix/` packages the release `.exe`, unchanged,
+  as an MSIX (full trust, `allowElevation` for "Restart as administrator", a `V-Clicker.exe` command-line alias) and
+  tests it inside the package. Nothing in the app changed.
 - **CI/CD overhaul** (see `docs/ci-cd.md`). Every push and PR now runs: lint (`dotnet format`, PSScriptAnalyzer, and
   the .NET analyzers at the *recommended* level with warnings as errors), the unit tests on Windows 2022 and 2025,
   the same tests under a coverage collector (HTML report, summary on the PR), the real-input integration tests, a

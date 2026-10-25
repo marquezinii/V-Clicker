@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Template for the Microsoft Store package (docs/microsoft-store.md). build-store-msix.ps1 fills in Identity and
+     PublisherDisplayName with the exact values Partner Center reserves, and the Version from src\VClicker.csproj. -->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 uap10 desktop rescap">
+  <Identity
+    Name="VemryxInc.V-Clicker"
+    Publisher="CN=1FB9E268-F80A-40DF-8E57-BBB7C7849ABD"
+    Version="1.0.0.0"
+    ProcessorArchitecture="neutral" />
+  <Properties>
+    <DisplayName>V-Clicker</DisplayName>
+    <PublisherDisplayName>Vemryx Inc.</PublisherDisplayName>
+    <Description>Fast, precise and lightweight autoclicker for Windows.</Description>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+  <Resources>
+    <Resource Language="en-US" />
+    <Resource Language="pt-BR" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily
+      Name="Windows.Desktop"
+      MinVersion="10.0.19041.0"
+      MaxVersionTested="10.0.26200.0" />
+  </Dependencies>
+  <Applications>
+    <Application
+      Id="VClicker"
+      Executable="V-Clicker.exe"
+      uap10:RuntimeBehavior="packagedClassicApp"
+      uap10:TrustLevel="mediumIL">
+      <uap:VisualElements
+        DisplayName="V-Clicker"
+        Description="Fast, precise and lightweight autoclicker for Windows."
+        BackgroundColor="#1A1B1F"
+        Square44x44Logo="Assets\Square44x44Logo.png"
+        Square150x150Logo="Assets\Square150x150Logo.png" />
+      <Extensions>
+        <!-- Developer Mode's command line (docs/developer.md) works from any console through this alias. -->
+        <uap3:Extension Category="windows.appExecutionAlias" Executable="V-Clicker.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="V-Clicker.exe" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <!-- The app is a classic WinForms (.NET Framework) program: global hotkeys, SendInput, UI Automation. -->
+    <rescap:Capability Name="runFullTrust" />
+    <!-- "Restart as administrator" (MainForm.RestartAsAdministrator), only when the user asks for it. -->
+    <rescap:Capability Name="allowElevation" />
+  </Capabilities>
+</Package>
